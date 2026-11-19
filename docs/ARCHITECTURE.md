@@ -92,7 +92,7 @@ Measured with `ps` CPU-time deltas over 20–30 s, release build, snow at medium
 - 30 fps on battery, 20 fps in Low Power Mode, 60 fps on the power adapter;
 - window polling stops while paused, suspended or with accumulation off, and drops from 30 Hz to 8 Hz when no window has moved for 0.6 s.
 
-Memory: particle counts are capped per effect (260–2,600 per screen), and buffers are reused (capacity grows in powers of two, never per frame). Removing a display tears down its window, display link and GPU buffers. A multi-hour leak test was **not** run.
+Memory: particle counts are capped per effect (260–2,600 per screen), and buffers are reused (capacity grows in powers of two, never per frame). Removing a display tears down its window, display link and GPU buffers. A 10-minute run with heavy snow on two displays (RSS sampled every 30 s) stayed between 17 and 53 MB, mostly at 43–46 MB, with no upward trend; the dips are the system compressing memory. A multi-hour leak test was **not** run.
 
 ## Testing
 
