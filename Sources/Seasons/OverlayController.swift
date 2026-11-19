@@ -93,6 +93,7 @@ final class OverlayController: NSObject, MTKViewDelegate {
         hasEffect = scene.effect != nil
         world.flowersEnabled = scene.flowers
         world.accumulateOnWindowsAndDock = settings.accumulate
+        world.isMelting = settings.melting
         intensity = settings.intensity
         userPaused = settings.paused
         window.sharingType = settings.hideInScreenshots ? .none : .readOnly
@@ -114,7 +115,6 @@ final class OverlayController: NSObject, MTKViewDelegate {
     func perform(_ command: OverlayCommand) {
         switch command {
         case .clear: world.clearAll()
-        case .melt: world.startMelting()
         }
         wake()
         if userPaused { view.draw() }

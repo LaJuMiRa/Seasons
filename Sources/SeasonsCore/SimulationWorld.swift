@@ -37,8 +37,9 @@ public final class SimulationWorld {
     public var flowersEnabled = false {
         didSet { if !flowersEnabled { garden.setBase(nil) } }
     }
-    /// True while "Melt" runs; switches itself off when all piles are gone.
-    public private(set) var isMelting = false
+    /// While true, piles melt away (and new material melts soon after landing).
+    /// A switch: it stays on until the user turns it off.
+    public var isMelting = false
 
     private var rng: SeededRandom
     private let wind: Wind
@@ -90,11 +91,7 @@ public final class SimulationWorld {
         stash.removeAll()
         stashOrder.removeAll()
         garden.resetGrowth()
-        isMelting = false
     }
-
-    /// Lets piles shrink slowly until they are gone.
-    public func startMelting() { isMelting = true }
 
     public func setGardenBase(_ base: GardenBase?) {
         garden.setBase(flowersEnabled ? base : nil)
@@ -173,8 +170,9 @@ public final class SimulationWorld {
 
     /// True when nothing moves and nothing will move without new input.
     public var isQuiescent: Bool {
-        particles.isEmpty && lastSpawnIntensity == 0 && !isMelting && !garden.isAnimating
-            && (params.pile.decayPerSecond == 0 || ledges.allSatisfy { $0.totalMass == 0 })
+        let decays = params.pile.decayPerSecond > 0 || isMelting
+        return particles.isEmpty && lastSpawnIntensity == 0 && !garden.isAnimating
+            && (!decays || ledges.allSatisfy { $0.totalMass == 0 })
     }
 
     /// True if the cursor is close to something it could interact with.
@@ -334,13 +332,13 @@ public final class SimulationWorld {
         let decay = pile.decayPerSecond * dt + (isMelting ? pile.meltPerSecond * dt : 0)
         let particleMass = averageParticleArea * pile.depositFactor
         var budget = EffectCatalog.maxEjectPerFrame
-        var anyMass = false
         for li in ledges.indices {
             if ledges[li].totalMass == 0 && ledges[li].pendingSpillLeft == 0 && ledges[li].pendingSpillRight == 0 {
                 continue
             }
             ledges[li].relax(slope: pile.reposeSlope, iterations: 2)
             ledges[li].smooth(pile.smoothing)
+            ledges[li].enforceCap(pile.maxHeight(for: ledges[li].kind))
             if decay > 0 { ledges[li].decay(by: decay) }
             let id = ledges[li].id
             if ledges[li].kind != .floor {
@@ -359,10 +357,8 @@ public final class SimulationWorld {
                     emit(s, baseVelocity: v, scatter: 50, ignoreLedge: id, budget: &budget)
                 }
             }
-            if ledges[li].totalMass > 0 { anyMass = true }
         }
         // Stop once the piles are gone; when nothing new falls, also wait for the last flakes.
-        if isMelting && !anyMass && (lastSpawnIntensity > 0 || particles.isEmpty) { isMelting = false }
     }
 
     private var averageParticleArea: Float {

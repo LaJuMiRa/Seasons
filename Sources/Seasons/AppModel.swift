@@ -4,7 +4,6 @@ import SeasonsCore
 /// Commands the overlays execute once.
 enum OverlayCommand {
     case clear
-    case melt
 }
 
 /// Central app state: settings plus the derived scene (what is actually shown).

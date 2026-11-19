@@ -67,6 +67,7 @@ struct MenuTests {
         s.paused = true
         s.accumulate = false
         s.hideInScreenshots = false
+        s.melting = true
         store.save(s)
         #expect(store.load() == s)
     }
@@ -97,6 +98,12 @@ struct MenuTests {
         click("Hide in Screenshots and Screen Sharing", controller)
         #expect(!model.settings.hideInScreenshots && !reloaded().hideInScreenshots)
 
+        click("Melt Away", controller)
+        #expect(model.settings.melting && reloaded().melting)
+        #expect(item("Melt Away", in: controller.menu)?.state == .on)
+        click("Melt Away", controller)
+        #expect(!model.settings.melting && !reloaded().melting)
+
         click("Choose Automatically by Season", controller)
         #expect(model.settings.automatic && reloaded().automatic)
         // The summer-rain option only appears in automatic mode.
@@ -124,14 +131,13 @@ struct MenuTests {
         #expect(reloaded().intensity == value)
     }
 
-    @Test("Clear and Melt send commands to the overlays")
+    @Test("Clear Now sends a one-off command to the overlays")
     func commands() {
         let (model, controller) = makeMenu()
         var received: [String] = []
         model.onCommand { received.append("\($0)") }
         click("Clear Now", controller)
-        click("Melt Away", controller)
-        #expect(received == ["clear", "melt"])
+        #expect(received == ["clear"])
     }
 
     @Test("Automatic mode derives the scene from the season")

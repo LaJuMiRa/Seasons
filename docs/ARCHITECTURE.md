@@ -44,7 +44,7 @@ CADisplayLink tick ─► SimulationWorld.step(dt, mouse, intensity)
 
 - **Coordinates:** screen-local points, origin bottom-left, y up. One `SimulationWorld` per screen.
 - **Particles** relax toward a terminal velocity (`drag`) plus wind and sway. This first-order model behaves like gravity with air resistance: thrown particles rise, slow down and fall again. It is stable for any frame time up to 50 ms.
-- **Ledges** are 1D height fields with 3 pt cells along the screen bottom, the Dock top and visible window top edges. Landing particles add their area with a triangular kernel, so a pile is never a single stack. Each frame applies angle-of-repose relaxation (per-effect slope) and diffusion smoothing. A per-cell cap (maximum height × a smooth 0.78–1.0 wave) keeps piles from overflowing and gives full piles an uneven top. Open ends shed mass that falls off as particles.
+- **Ledges** are 1D height fields with 3 pt cells along the screen bottom, the Dock top and visible window top edges. Landing particles add their area with a triangular kernel, so a pile is never a single stack. Each frame applies angle-of-repose relaxation (per-effect slope) and diffusion smoothing. A per-cell cap (maximum height × a smooth 0.78–1.0 wave) gives full piles an uneven top; after every frame a hard cap at the maximum height catches material that was pushed sideways by the cursor or shifted by a moving window, so a pile can never exceed its limit. Open ends shed mass that falls off as particles.
 - **Cursor:** inside a 52 pt radius, airborne particles get pushed outward plus 55% of the cursor velocity. On piles, the cursor carves a circle: 40% of the removed mass is pushed to the side, 60% is thrown up as particles.
 - **Moving windows:** ledges are matched by window ID. A move shifts the pile against the motion (inertia, slides off the trailing end) and sheds a fraction that grows with speed, faster when the window is pulled down. Removed windows drop their pile. If a window disappears within 1.5 s after a Space switch, its pile is stashed and restored when the window returns.
 - **Occlusion:** an edge is visible only where no window in front (or the Dock or menu bar) covers it. Hidden cells keep their mass but neither render nor collect.
@@ -58,7 +58,7 @@ CADisplayLink tick ─► SimulationWorld.step(dt, mouse, intensity)
 | Window level | `.statusBar` (25) | Above the Dock (20) and normal windows, so snow lies visibly on the Dock. Below the screen saver. |
 | Effect switch | clears piles | A snow pile cannot sensibly turn into leaves. |
 | "Pile up on windows and Dock" off | screen bottom still collects | The bottom edge is the minimum the effect needs to look right. |
-| Melt | one-shot; ends when piles and air are empty | Matches "accumulation disappears slowly". |
+| Melt | a persistent switch; while on, piles melt at 1.2–4.5 pt/s and new material melts right after landing | A one-shot melt never ended during snowfall and could not be stopped. |
 | Summer in automatic mode | nothing, or rain if "Rain in Summer" is on | Spec: "Sommer aus/optional Regen". |
 | Hemisphere | northern | Target user; the core supports the southern hemisphere already. |
 | Dock length | estimated from Dock prefs: (tiles × (tile size + 4) + separators × 14 + 20) pt | No public API exposes it; the Dock's own windows cover the whole screen. |
@@ -96,5 +96,5 @@ Memory: particle counts are capped per effect (260–2,600 per screen), and buff
 
 ## Testing
 
-- `swift test` runs both test targets: 34 core tests (43 cases) and 8 menu tests (15 cases).
+- `swift test` runs both test targets: 36 core tests (48 cases) and 8 menu tests (15 cases).
 - `Seasons --render-preview <folder>` renders each effect on a synthetic desktop with the real Metal pipeline (also with a cursor sweep). It was used to check the look without Screen Recording permission.

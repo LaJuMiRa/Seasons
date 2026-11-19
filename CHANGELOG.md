@@ -13,7 +13,8 @@ All notable changes to this project are documented here. The format follows
 - Pointer interaction: pushes particles, carves piles and throws material up; bends and sweeps away flowers.
 - Snow slides off moving windows and falls when a window closes or minimizes; piles survive Space switches.
 - Automatic effect by season, with optional rain in summer.
-- Amount levels: Off, Light, Medium, Heavy, Variable. Pause, Clear Now, Melt Away.
+- Amount levels: Off, Light, Medium, Heavy, Variable. Pause, Clear Now, and a Melt Away switch.
+- Hard maximum pile height per edge (snow: 30 pt on the screen bottom, 24 pt on the Dock, 20 pt on windows).
 - Options: pile up on windows and Dock, hide in screenshots and screen sharing, launch at login.
 - English and German localization.
 - Power saving: pauses on lock, sleep, screen saver and occlusion, and when idle; 30 fps on battery and 20 fps in Low Power Mode.

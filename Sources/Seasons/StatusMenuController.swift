@@ -74,7 +74,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(action(s.paused ? L("Resume") : L("Pause"), #selector(togglePause), key: "p"))
         menu.addItem(amountMenu(current: s.intensity))
         menu.addItem(action(L("Clear Now"), #selector(clearNow), key: "k"))
-        menu.addItem(action(L("Melt Away"), #selector(meltAway)))
+        menu.addItem(action(L("Melt Away"), #selector(toggleMelt), checked: s.melting))
 
         menu.addItem(.separator())
         menu.addItem(action(L("Pile Up on Windows and Dock"), #selector(toggleAccumulate), checked: s.accumulate))
@@ -161,7 +161,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     @objc private func toggleAccumulate() { model.update { $0.accumulate.toggle() } }
     @objc private func toggleHide() { model.update { $0.hideInScreenshots.toggle() } }
     @objc private func clearNow() { model.send(.clear) }
-    @objc private func meltAway() { model.send(.melt) }
+    @objc private func toggleMelt() { model.update { $0.melting.toggle() } }
 
     @objc private func selectAmount(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let value = Intensity(rawValue: raw) else { return }

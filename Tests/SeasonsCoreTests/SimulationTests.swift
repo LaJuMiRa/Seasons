@@ -136,23 +136,59 @@ struct SimulationTests {
         }
     }
 
-    @Test("Clear removes everything, melt removes piles gradually")
-    func clearAndMelt() {
+    @Test("The floor never exceeds its maximum, even after sweeping back and forth", arguments: EffectKind.allCases)
+    func floorCapHolds(effect: EffectKind) {
+        let w = SimulationWorld(width: 800, height: 600, effect: effect, seed: 31)
+        w.updateLedges([floorSpec], time: 0, removal: .spill)
+        let cap = EffectCatalog.parameters(for: effect).pile.maxHeightFloor
+        var t = 0.0
+        // Ten minutes of heavy fall while the cursor keeps sweeping along the floor,
+        // pushing material sideways into walls.
+        for i in 0..<(600 * 30) {
+            let phase = Float(i % 240) / 240
+            let x = 40 + 720 * (phase < 0.5 ? phase * 2 : 2 - phase * 2)
+            w.step(dt: 1.0 / 30, time: t, input: StepInput(mouse: Vec2(x, 6), intensity: 2.2))
+            t += 1.0 / 30
+        }
+        #expect((w.ledges[0].heights.max() ?? 0) <= cap + 0.001)
+    }
+
+    @Test("Clear removes everything immediately")
+    func clear() {
         let w = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 13)
         w.updateLedges([floorSpec], time: 0, removal: .spill)
-        run(w, seconds: 30, intensity: 3)
-        w.startMelting()
-        let before = w.ledges[0].totalMass
-        run(w, seconds: 1, intensity: 0, start: 30)
-        #expect(w.ledges[0].totalMass < before)
-        #expect(w.ledges[0].totalMass > 0)
-        run(w, seconds: 60, intensity: 0, start: 31)
-        #expect(w.ledges[0].totalMass == 0)
-        #expect(!w.isMelting)
-        run(w, seconds: 5, intensity: 3, start: 100)
+        run(w, seconds: 10, intensity: 3)
         w.clearAll()
         #expect(w.particles.isEmpty)
         #expect(w.ledges.allSatisfy { $0.totalMass == 0 })
+    }
+
+    @Test("Melting is a switch: piles vanish while on and build up again when off")
+    func meltSwitch() {
+        let w = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 13)
+        w.updateLedges([floorSpec], time: 0, removal: .spill)
+        run(w, seconds: 30, intensity: 3)
+        #expect(w.ledges[0].totalMass > 0)
+
+        // Switched on while it keeps snowing: the pile melts away within seconds and stays
+        // gone; single flakes still touch down and melt right after.
+        let before = w.ledges[0].totalMass
+        w.isMelting = true
+        run(w, seconds: 15, intensity: 1, start: 30)
+        #expect(w.isMelting) // never switches itself off
+        #expect(w.ledges[0].totalMass < before * 0.03)
+        #expect((w.ledges[0].heights.max() ?? 0) < 6)
+        run(w, seconds: 25, intensity: 1, start: 45)
+        #expect(w.ledges[0].totalMass < before * 0.03)
+
+        // Nothing falls and nothing lies around: the world may idle even with melting on.
+        run(w, seconds: 20, intensity: 0, start: 70)
+        #expect(w.isQuiescent)
+
+        // Switched off: snow stays again.
+        w.isMelting = false
+        run(w, seconds: 20, intensity: 3, start: 90)
+        #expect(w.ledges[0].totalMass > 100)
     }
 
     @Test("Rain produces splash droplets on impact")

@@ -260,6 +260,14 @@ public struct Ledge: Sendable {
         return spills
     }
 
+    /// Hard limit: cuts every cell down to `maxHeight` (excess is compacted away).
+    /// Needed because pushing material sideways or shifting it can stack above the cap.
+    mutating func enforceCap(_ maxHeight: Float) {
+        for i in heights.indices where heights[i] > maxHeight {
+            heights[i] = maxHeight
+        }
+    }
+
     mutating func decay(by amount: Float) {
         guard amount > 0 else { return }
         for i in heights.indices where heights[i] > 0 {

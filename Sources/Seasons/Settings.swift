@@ -11,6 +11,8 @@ struct Settings: Equatable {
     var paused = false
     var accumulate = true
     var hideInScreenshots = true
+    /// "Melt Away" switch: while on, nothing stays lying around.
+    var melting = false
 }
 
 /// Persists `Settings` in UserDefaults. Launch-at-login is not stored here:
@@ -26,6 +28,7 @@ struct SettingsStore {
         static let paused = "paused"
         static let accumulate = "accumulate"
         static let hideInScreenshots = "hideInScreenshots"
+        static let melting = "melting"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -42,6 +45,7 @@ struct SettingsStore {
         s.paused = bool(Key.paused, default: s.paused)
         s.accumulate = bool(Key.accumulate, default: s.accumulate)
         s.hideInScreenshots = bool(Key.hideInScreenshots, default: s.hideInScreenshots)
+        s.melting = bool(Key.melting, default: s.melting)
         return s
     }
 
@@ -54,6 +58,7 @@ struct SettingsStore {
         defaults.set(s.paused, forKey: Key.paused)
         defaults.set(s.accumulate, forKey: Key.accumulate)
         defaults.set(s.hideInScreenshots, forKey: Key.hideInScreenshots)
+        defaults.set(s.melting, forKey: Key.melting)
     }
 
     private func bool(_ key: String, default value: Bool) -> Bool {

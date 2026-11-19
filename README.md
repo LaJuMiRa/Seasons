@@ -17,7 +17,7 @@ Snow, autumn leaves, rain and cherry blossoms falling over your Mac desktop. The
 ## Features
 
 - **Five effects:** snow (winter), autumn leaves, rain, cherry blossoms (spring) and flowers along the Dock. The flowers can be combined with any effect.
-- **Things pile up** on the screen bottom, on top of the Dock and on the visible top edges of windows. Piles spread out naturally and have a maximum height.
+- **Things pile up** on the screen bottom, on top of the Dock and on the visible top edges of windows. Piles spread out naturally and never grow beyond a maximum height (snow: 30 pt on the screen bottom, 24 pt on the Dock, 20 pt on windows).
 - **Sweep with the pointer:** the pointer pushes falling particles away, digs into piles and throws the material up so it falls again. No clicks are intercepted.
 - **Windows matter:** move a window quickly and its snow slides off. Close or minimize it and the pile falls down. Covered parts of an edge collect nothing. Piles survive switching Spaces.
 - **Flowers** grow slowly, sway in the wind, bend away from the pointer and can be swept off with a fast move. They grow back.
@@ -72,7 +72,7 @@ Click the menu bar icon:
 | Pause / Resume (⌘P) | Freeze everything |
 | Amount | Off, Light, Medium, Heavy or Variable (changes slowly over time) |
 | Clear Now (⌘K) | Remove everything immediately |
-| Melt Away | Let the piles disappear slowly |
+| Melt Away | Switch: while checked, piles melt within seconds and nothing stays; uncheck to let things pile up again |
 | Pile Up on Windows and Dock | Off: only the screen bottom collects |
 | Hide in Screenshots and Screen Sharing | Keeps the overlay out of captures (on by default, see limitations) |
 | Launch at Login | Start Seasons when you log in |
