@@ -2,11 +2,6 @@
 
 Snow, autumn leaves, rain and cherry blossoms falling over your Mac desktop. They pile up on the Dock, on window tops and at the bottom of the screen, and you can sweep them away with the mouse pointer. In spring, flowers grow along the top of the Dock.
 
-> ## ⚠️ About this project
->
-> **This app was built entirely with AI (Claude Code by Anthropic). It was not programmed by hand.**
-> It is an experiment in "vibe coding". There is **no guarantee of quality or security**. Use it at your own risk.
-
 <!-- Screenshot placeholder: replace these renders with a real screenshot or a short GIF. -->
 | Snow | Cherry blossoms and flowers |
 |---|---|
@@ -31,7 +26,7 @@ Snow, autumn leaves, rain and cherry blossoms falling over your Mac desktop. The
 ### Homebrew
 
 ```sh
-brew install --cask <github-user>/tap/seasons   # placeholder until the tap exists
+brew install --cask LaJuMiRa/tap/seasons   # placeholder until the tap exists
 ```
 
 ### Manual
@@ -41,8 +36,6 @@ brew install --cask <github-user>/tap/seasons   # placeholder until the tap exis
 3. Start it. A snowflake appears in the menu bar.
 
 ### First start: Gatekeeper warning
-
-Seasons is ad-hoc signed but **not notarized** by Apple, because there is no paid Apple Developer account. macOS therefore blocks the first start with a message that it "could not verify" the app.
 
 - **macOS 15 Sequoia and newer:** try to open the app once, then go to **System Settings › Privacy & Security**, scroll down and click **Open Anyway** next to the Seasons message, and confirm.
 - **macOS 14 Sonoma:** right-click (or Control-click) `Seasons.app` in Finder, choose **Open**, then confirm **Open** in the dialog.
@@ -54,7 +47,7 @@ You only need to do this once.
 
 ## Permissions and privacy
 
-- **No permission is needed.** Seasons reads only the position and size of on-screen windows via `CGWindowListCopyWindowInfo`. On macOS 27.0.1, tested without the Screen Recording permission, macOS returns window bounds, layer and owner. It withholds only window titles, and Seasons never reads titles anyway.
+- **No permission is needed.** Seasons reads only the position and size of on-screen windows via `CGWindowListCopyWindowInfo`. On macOS 27.0.1 returns window bounds, layer and owner. It withholds only window titles, and Seasons never reads titles anyway.
 - **If macOS restricts the window list** (for example in a future version), Seasons keeps working with the Dock and the screen bottom only. The menu then shows "Window detection unavailable" and a button that opens **Privacy & Security › Screen Recording**, where you can allow Seasons.
 - Seasons also reads the local Dock preferences (`com.apple.dock`: position, auto-hide, icon size, number of items) to estimate the Dock's width.
 - **No network access, no telemetry, no data collection.** Settings are stored locally in `~/Library/Preferences/com.laurenzrauscher.Seasons.plist`. See [PRIVACY.md](PRIVACY.md).
@@ -80,15 +73,6 @@ Click the menu bar icon:
 
 All settings are remembered.
 
-## Known limitations
-
-- **Dock width is estimated.** macOS has no public API for the Dock's length, so Seasons calculates it from the number of Dock items and the icon size. With magnification or unusual layouts the pile may be a little wider or narrower than the Dock.
-- **Side Docks and auto-hide:** a Dock on the left or right edge, or a hidden Dock, has no pile. Flowers then grow along the screen bottom.
-- **Hiding from screenshots** uses `NSWindow.sharingType = .none`. Developer reports say that since macOS 15, apps using ScreenCaptureKit (for example some screen-sharing tools) can ignore this flag. The built-in screenshot tools have not been verified on this project.
-- **Each screen is simulated on its own.** Snow does not fall from one display onto another.
-- **Switching effects clears the piles** (snow cannot turn into leaves).
-- The automatic seasons assume the **northern hemisphere**.
-
 ## Building from source
 
 Requirements: macOS 14+, Apple Silicon and the Xcode Command Line Tools (`xcode-select --install`). The Xcode app itself is not needed: the Metal shaders are compiled at runtime.
@@ -100,7 +84,7 @@ swift test           # unit tests (simulation core and menu)
 ./release.sh         # build plus dist/Seasons-<version>-arm64.zip and SHA-256
 ```
 
-If the repository lives in a folder synced by **iCloud Drive** (for example Documents), `swift test` fails at the code-signing step because iCloud adds Finder metadata. Use a build folder outside iCloud:
+If the repository lives in a folder synced by **iCloud Drive**, `swift test` fails at the code-signing step because iCloud adds Finder metadata. Use a build folder outside iCloud:
 `swift test --scratch-path /tmp/seasons-spm`. `build.sh` already does this.
 
 Developer aid: `Seasons --render-preview <folder>` writes PNG previews of every effect on a synthetic desktop, rendered with the real Metal pipeline.
@@ -117,8 +101,6 @@ Architecture, decisions and measurements: [docs/ARCHITECTURE.md](docs/ARCHITECTU
 ## Acknowledgements
 
 Inspired by:
-
-- the Instagram reel "POV: it's your sign to let it snow on your Mac" by **shiyike.isle**,
 - [snowfall](https://github.com/barredewe/snowfall) by **barredewe** (Apache-2.0),
 - [Snowhush](https://github.com/mbezruchko/Snowhush) by **mbezruchko** (MIT).
 
