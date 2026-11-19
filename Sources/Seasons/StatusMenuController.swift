@@ -8,14 +8,12 @@ import SeasonsCore
 final class StatusMenuController: NSObject, NSMenuDelegate {
     private let model: AppModel
     private let windows: WindowTracker
-    private let overlays: OverlayManager
     private let item: NSStatusItem
-    private let menu = NSMenu()
+    let menu = NSMenu()
 
-    init(model: AppModel, windows: WindowTracker, overlays: OverlayManager) {
+    init(model: AppModel, windows: WindowTracker) {
         self.model = model
         self.windows = windows
-        self.overlays = overlays
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
         menu.delegate = self

@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let system = SystemMonitor()
         let windows = WindowTracker()
         let overlays = OverlayManager(context: context, model: model, system: system, windows: windows)
-        let menu = StatusMenuController(model: model, windows: windows, overlays: overlays)
+        let menu = StatusMenuController(model: model, windows: windows)
 
         self.model = model
         self.system = system

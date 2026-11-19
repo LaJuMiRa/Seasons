@@ -21,5 +21,7 @@ let package = Package(
             exclude: ["Resources"]
         ),
         .testTarget(name: "SeasonsCoreTests", dependencies: ["SeasonsCore"]),
+        // Menu wiring and settings persistence of the macOS app.
+        .testTarget(name: "SeasonsAppTests", dependencies: ["Seasons", "SeasonsCore"]),
     ]
 )
