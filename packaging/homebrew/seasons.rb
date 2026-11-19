@@ -1,16 +1,15 @@
 # Homebrew Cask template for Seasons.
-# Copy to Casks/seasons.rb in your tap repository (homebrew-tap) and replace the placeholders:
+# Copy to Casks/seasons.rb in the tap repository (LaJuMiRa/homebrew-tap) and replace:
 #   __VERSION__   e.g. 1.0.0
-#   __SHA256__    from dist/Seasons-<version>-arm64.zip.sha256 or the GitHub release page
-#   __GITHUB_USER__  your GitHub user name
+#   __SHA256__    from Seasons-<version>-arm64.zip.sha256 on the GitHub release page
 cask "seasons" do
   version "__VERSION__"
   sha256 "__SHA256__"
 
-  url "https://github.com/__GITHUB_USER__/seasons/releases/download/v#{version}/Seasons-#{version}-arm64.zip"
+  url "https://github.com/LaJuMiRa/Seasons/releases/download/v#{version}/Seasons-#{version}-arm64.zip"
   name "Seasons"
   desc "Seasonal snow, leaves, rain, blossoms and flowers on your desktop"
-  homepage "https://github.com/__GITHUB_USER__/seasons"
+  homepage "https://github.com/LaJuMiRa/Seasons"
 
   depends_on arch: :arm64
   depends_on macos: ">= :sonoma"
