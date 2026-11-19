@@ -26,7 +26,7 @@ Snow, autumn leaves, rain and cherry blossoms falling over your Mac desktop. The
 ### Homebrew
 
 ```sh
-brew install --cask LaJuMiRa/tap/seasons   # placeholder until the tap exists
+brew install --cask LaJuMiRa/tap/seasons
 ```
 
 ### Manual
