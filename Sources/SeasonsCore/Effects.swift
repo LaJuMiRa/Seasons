@@ -41,6 +41,8 @@ public struct PileParameters: Sendable {
     public var maxHeightWindow: Float
     /// Angle of repose as max height difference per point of horizontal distance.
     public var reposeSlope: Float
+    /// Diffusion strength per frame (0 = keep bumps, 0.3 = spreads like water).
+    public var smoothing: Float
     /// Fraction of a landing sprite's area that becomes pile area.
     public var depositFactor: Float
     /// Natural decay in points per second (evaporation for rain, 0 otherwise).

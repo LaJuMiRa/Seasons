@@ -243,7 +243,7 @@ public final class SimulationWorld {
                 swayFrequency: rng.float(in: params.swayFrequency),
                 shape: params.shape,
                 color: params.colors[rng.int(below: params.colors.count)],
-                life: -1,
+                life: .infinity,
                 ignoreLedge: 0,
                 ignoreTimer: 0,
                 variant: Float(rng.int(below: 2))
@@ -340,6 +340,7 @@ public final class SimulationWorld {
                 continue
             }
             ledges[li].relax(slope: pile.reposeSlope, iterations: 2)
+            ledges[li].smooth(pile.smoothing)
             if decay > 0 { ledges[li].decay(by: decay) }
             let id = ledges[li].id
             if ledges[li].kind != .floor {
@@ -360,7 +361,8 @@ public final class SimulationWorld {
             }
             if ledges[li].totalMass > 0 { anyMass = true }
         }
-        if isMelting && !anyMass { isMelting = false }
+        // Stop once the piles are gone; when nothing new falls, also wait for the last flakes.
+        if isMelting && !anyMass && (lastSpawnIntensity > 0 || particles.isEmpty) { isMelting = false }
     }
 
     private var averageParticleArea: Float {
@@ -397,7 +399,7 @@ public final class SimulationWorld {
                     swayFrequency: rng.float(in: params.swayFrequency),
                     shape: params.shape,
                     color: params.colors[rng.int(below: params.colors.count)],
-                    life: -1,
+                    life: .infinity,
                     ignoreLedge: ignoreLedge,
                     ignoreTimer: 0.25,
                     variant: Float(rng.int(below: 2))
@@ -426,7 +428,7 @@ public final class SimulationWorld {
             position: p, velocity: velocity, size: rng.float(in: 6...9), rotation: rng.float(in: 0...6.28),
             spin: rng.float(in: b.spin) * rng.sign(), fallSpeed: rng.float(in: b.fallSpeed),
             swayPhase: rng.float(in: 0...6.28), swayFrequency: rng.float(in: b.swayFrequency),
-            shape: .petal, color: color, life: -1, ignoreLedge: 0, ignoreTimer: 0, variant: 0))
+            shape: .petal, color: color, life: .infinity, ignoreLedge: 0, ignoreTimer: 0, variant: 0))
     }
 
     // MARK: - Rendering

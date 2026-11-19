@@ -32,6 +32,12 @@ public struct PileVertex: Sendable {
     public var x: Float
     public var y: Float
     public var color: RGBA
+
+    public init(x: Float, y: Float, color: RGBA) {
+        self.x = x
+        self.y = y
+        self.color = color
+    }
 }
 
 /// Everything the renderer needs for one frame, in draw order:
@@ -47,7 +53,7 @@ public struct RenderBatch: Sendable {
         sprites.removeAll(keepingCapacity: true)
     }
 
-    mutating func appendQuad(x0: Float, x1: Float, bottom0: Float, top0: Float, bottom1: Float, top1: Float,
+    public mutating func appendQuad(x0: Float, x1: Float, bottom0: Float, top0: Float, bottom1: Float, top1: Float,
                              colorBottom: RGBA, colorTop: RGBA) {
         let a = PileVertex(x: x0, y: bottom0, color: colorBottom)
         let b = PileVertex(x: x1, y: bottom1, color: colorBottom)

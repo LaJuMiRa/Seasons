@@ -11,7 +11,7 @@ public struct Particle: Sendable {
     public var swayFrequency: Float
     public var shape: SpriteShape
     public var color: RGBA
-    /// Seconds left for transient splash droplets; negative means unlimited.
+    /// Seconds left for transient splash droplets; `.infinity` for normal particles.
     public var life: Float
     /// Ledge this particle must not land on for `ignoreTimer` seconds (just left it).
     public var ignoreLedge: UInt64
@@ -19,7 +19,7 @@ public struct Particle: Sendable {
     /// Sprite variant (e.g. leaf type), stable for the particle's lifetime.
     public var variant: Float
 
-    public var isSplash: Bool { life >= 0 }
+    public var isSplash: Bool { life.isFinite }
 
     /// Area used when the particle lands (square points).
     public var area: Float { size * size * 0.8 }

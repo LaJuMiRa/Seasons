@@ -163,6 +163,17 @@ struct SimulationTests {
         #expect(w.particles.contains { $0.isSplash })
     }
 
+    @Test("Splash droplets expire instead of floating forever")
+    func splashesExpire() {
+        let w = SimulationWorld(width: 800, height: 600, effect: .rain, seed: 29)
+        w.updateLedges([floorSpec, windowSpec(id: 1, x: 100, y: 300)], time: 0, removal: .spill)
+        run(w, seconds: 10)
+        run(w, seconds: 3, intensity: 0, start: 10)
+        // Without new rain only short-lived drips from the water films remain; nothing hovers.
+        #expect(w.particles.allSatisfy { $0.isSplash ? $0.life <= 0.9 : $0.velocity.y < -50 })
+        #expect(w.particles.filter { !$0.isSplash }.isEmpty)
+    }
+
     @Test("A quiet world is quiescent; falling particles are not")
     func quiescence() {
         let w = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 19)

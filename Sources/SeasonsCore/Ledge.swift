@@ -1,3 +1,5 @@
+import Foundation
+
 /// Description of a horizontal surface that can carry a pile, produced by `LedgeLayout`.
 public struct LedgeSpec: Equatable, Sendable {
     public var id: UInt64
@@ -133,8 +135,17 @@ public struct Ledge: Sendable {
 
     // MARK: - Mass
 
+    /// Per-cell fraction of the maximum height (0.78...1). A smooth, stable wave so a full
+    /// pile has a natural, uneven top instead of a flat slab.
+    @inline(__always)
+    func capFactor(_ i: Int) -> Float {
+        let phase = Float(id % 997)
+        let x = Float(i)
+        return 0.89 + 0.07 * sin(x * 0.19 + phase) + 0.04 * sin(x * 0.053 + phase * 1.7)
+    }
+
     /// Adds `area` square points centered at `x`, spread with a triangular kernel of
-    /// half-width `radius` over visible cells. Height is capped at `maxHeight`.
+    /// half-width `radius` over visible cells. Height is capped at `maxHeight` (shaped by `capFactor`).
     @discardableResult
     mutating func deposit(atX x: Float, area: Float, radius: Float, maxHeight: Float) -> Bool {
         let r = max(radius, cellWidth)
@@ -149,7 +160,7 @@ public struct Ledge: Sendable {
         let scale = area / (weightSum * cellWidth)
         for i in lo...hi where visible[i] {
             let w = max(0, 1 - abs(cellCenterX(i) - x) / r)
-            heights[i] = min(maxHeight, heights[i] + w * scale)
+            heights[i] = min(maxHeight * capFactor(i), heights[i] + w * scale)
         }
         return true
     }
@@ -186,6 +197,18 @@ public struct Ledge: Sendable {
                 heights[n - 1] -= t
                 pendingSpillRight += t * cellWidth
             }
+        }
+    }
+
+    /// Diffusion pass that rounds off small bumps (snow settles, water spreads).
+    /// Flux form between neighbors: conserves mass and never produces negative heights.
+    mutating func smooth(_ k: Float) {
+        guard k > 0, heights.count > 1 else { return }
+        let rate = min(k, 1) * 0.25
+        for i in 0..<(heights.count - 1) where visible[i] && visible[i + 1] {
+            let flow = (heights[i] - heights[i + 1]) * rate
+            heights[i] -= flow
+            heights[i + 1] += flow
         }
     }
 
