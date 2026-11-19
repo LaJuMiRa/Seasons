@@ -59,6 +59,12 @@ public struct RenderBatch: Sendable {
         let b = PileVertex(x: x1, y: bottom1, color: colorBottom)
         let c = PileVertex(x: x0, y: top0, color: colorTop)
         let d = PileVertex(x: x1, y: top1, color: colorTop)
-        pileVertices.append(contentsOf: [a, b, c, c, b, d])
+        // Appended one by one: an array literal here would allocate for every quad.
+        pileVertices.append(a)
+        pileVertices.append(b)
+        pileVertices.append(c)
+        pileVertices.append(c)
+        pileVertices.append(b)
+        pileVertices.append(d)
     }
 }

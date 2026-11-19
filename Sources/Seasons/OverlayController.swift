@@ -17,6 +17,10 @@ final class OverlayController: NSObject, MTKViewDelegate {
     private var quietFrames = 0
     private var lastSpecs: [LedgeSpec] = []
     private var occlusionToken: NSObjectProtocol?
+    /// Drives frames. CADisplayLink (macOS 14) lets the system schedule exactly the
+    /// requested rate; MTKView's own loop is turned off.
+    private var displayLink: CADisplayLink?
+    private var framesPerSecond = SystemMonitor.fpsOnAC
 
     // Run state. Rendering happens only when all of these allow it.
     private var userPaused = false
@@ -45,10 +49,17 @@ final class OverlayController: NSObject, MTKViewDelegate {
         view.framebufferOnly = true
         view.layer?.isOpaque = false
         view.delegate = self
-        view.preferredFramesPerSecond = SystemMonitor.fpsOnAC
+        view.isPaused = true
+        view.enableSetNeedsDisplay = false
         window.contentView = view
         window.setFrame(screen.frame, display: false)
         window.orderFrontRegardless()
+
+        let link = view.displayLink(target: self, selector: #selector(displayTick(_:)))
+        link.isPaused = true
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+        applyFrameRate()
 
         occlusionToken = NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
@@ -59,7 +70,8 @@ final class OverlayController: NSObject, MTKViewDelegate {
 
     func tearDown() {
         if let occlusionToken { NotificationCenter.default.removeObserver(occlusionToken) }
-        view.isPaused = true
+        displayLink?.invalidate()
+        displayLink = nil
         view.delegate = nil
         window.orderOut(nil)
         window.contentView = nil
@@ -90,7 +102,10 @@ final class OverlayController: NSObject, MTKViewDelegate {
     }
 
     func setSuspended(_ value: Bool, framesPerSecond: Int) {
-        view.preferredFramesPerSecond = min(framesPerSecond, screen.maximumFramesPerSecond)
+        if framesPerSecond != self.framesPerSecond {
+            self.framesPerSecond = framesPerSecond
+            applyFrameRate()
+        }
         guard value != suspended else { return }
         suspended = value
         updateRunning()
@@ -132,9 +147,19 @@ final class OverlayController: NSObject, MTKViewDelegate {
     private var shouldRender: Bool { !suspended && !occluded && !userPaused && !isIdle }
 
     private func updateRunning() {
+        guard let link = displayLink else { return }
         let run = shouldRender
-        if run && view.isPaused { lastFrame = nil }
-        view.isPaused = !run
+        if run && link.isPaused { lastFrame = nil }
+        link.isPaused = !run
+    }
+
+    private func applyFrameRate() {
+        let fps = Float(min(framesPerSecond, screen.maximumFramesPerSecond))
+        displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: fps * 0.5, maximum: fps, preferred: fps)
+    }
+
+    @objc private func displayTick(_ link: CADisplayLink) {
+        view.draw()
     }
 
     func wake() {
