@@ -82,7 +82,8 @@ final class OverlayManager {
                     existing.setScreen(screen)
                 }
             } else {
-                let controller = OverlayController(screen: screen, displayID: id, context: context)
+                let controller = OverlayController(screen: screen, displayID: id, context: context,
+                                                  desktopOnly: model.settings.desktopOnly)
                 controllers[id] = controller
                 controller.configure(scene: model.scene, settings: model.settings)
                 controller.setSuspended(system.isSuspended, framesPerSecond: system.framesPerSecond)

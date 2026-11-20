@@ -80,6 +80,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(action(L("Pile Up on Windows and Dock"), #selector(toggleAccumulate), checked: s.accumulate))
         menu.addItem(action(L("Hide in Screenshots and Screen Sharing"), #selector(toggleHide),
                             checked: s.hideInScreenshots))
+        menu.addItem(action(L("Only on Desktop, Not Over Full-Screen Apps"), #selector(toggleDesktopOnly),
+                            checked: s.desktopOnly))
         menu.addItem(action(L("Launch at Login"), #selector(toggleLogin), checked: LoginItem.isEnabled))
         if LoginItem.needsApproval {
             menu.addItem(action(L("Approve in Login Items Settings…"), #selector(openLoginSettings)))
@@ -160,6 +162,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     @objc private func togglePause() { model.update { $0.paused.toggle() } }
     @objc private func toggleAccumulate() { model.update { $0.accumulate.toggle() } }
     @objc private func toggleHide() { model.update { $0.hideInScreenshots.toggle() } }
+    @objc private func toggleDesktopOnly() { model.update { $0.desktopOnly.toggle() } }
     @objc private func clearNow() { model.send(.clear) }
     @objc private func toggleMelt() { model.update { $0.melting.toggle() } }
 

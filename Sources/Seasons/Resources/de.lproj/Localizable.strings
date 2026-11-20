@@ -25,6 +25,7 @@
 "Melt Away" = "Schmelzen lassen";
 "Pile Up on Windows and Dock" = "Auf Fenstern und Dock liegen bleiben";
 "Hide in Screenshots and Screen Sharing" = "In Bildschirmfotos und Bildschirmfreigaben ausblenden";
+"Only on Desktop, Not Over Full-Screen Apps" = "Nur auf dem Schreibtisch, nicht über Vollbild-Apps";
 "Launch at Login" = "Bei Anmeldung starten";
 "Approve in Login Items Settings…" = "In den Anmeldeobjekt-Einstellungen erlauben …";
 "Window detection: active" = "Fenstererkennung: aktiv";

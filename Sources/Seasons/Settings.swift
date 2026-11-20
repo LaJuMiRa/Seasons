@@ -13,6 +13,8 @@ struct Settings: Equatable {
     var hideInScreenshots = true
     /// "Melt Away" switch: while on, nothing stays lying around.
     var melting = false
+    /// While on, an overlay hides while its screen shows a full-screen app.
+    var desktopOnly = false
 }
 
 /// Persists `Settings` in UserDefaults. Launch-at-login is not stored here:
@@ -29,6 +31,7 @@ struct SettingsStore {
         static let accumulate = "accumulate"
         static let hideInScreenshots = "hideInScreenshots"
         static let melting = "melting"
+        static let desktopOnly = "desktopOnly"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -46,6 +49,7 @@ struct SettingsStore {
         s.accumulate = bool(Key.accumulate, default: s.accumulate)
         s.hideInScreenshots = bool(Key.hideInScreenshots, default: s.hideInScreenshots)
         s.melting = bool(Key.melting, default: s.melting)
+        s.desktopOnly = bool(Key.desktopOnly, default: s.desktopOnly)
         return s
     }
 
@@ -59,6 +63,7 @@ struct SettingsStore {
         defaults.set(s.accumulate, forKey: Key.accumulate)
         defaults.set(s.hideInScreenshots, forKey: Key.hideInScreenshots)
         defaults.set(s.melting, forKey: Key.melting)
+        defaults.set(s.desktopOnly, forKey: Key.desktopOnly)
     }
 
     private func bool(_ key: String, default value: Bool) -> Bool {

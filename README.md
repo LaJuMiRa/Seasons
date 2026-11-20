@@ -68,6 +68,7 @@ Click the menu bar icon:
 | Melt Away | Switch: while checked, piles melt within seconds and nothing stays; uncheck to let things pile up again |
 | Pile Up on Windows and Dock | Off: only the screen bottom collects |
 | Hide in Screenshots and Screen Sharing | Keeps the overlay out of captures (on by default, see limitations) |
+| Only on Desktop, Not Over Full-Screen Apps | Hides the effects on a screen while it shows an app in full screen (off by default) |
 | Launch at Login | Start Seasons when you log in |
 | About Seasons / Quit Seasons (⌘Q) | |
 

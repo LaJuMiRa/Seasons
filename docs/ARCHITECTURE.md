@@ -96,5 +96,5 @@ Memory: particle counts are capped per effect (260–2,600 per screen), and buff
 
 ## Testing
 
-- `swift test` runs both test targets: 36 core tests (48 cases) and 8 menu tests (15 cases).
+- `swift test` runs both test targets: 36 core tests (48 cases) and 10 app tests (menu, settings, overlay window).
 - `Seasons --render-preview <folder>` renders each effect on a synthetic desktop with the real Metal pipeline (also with a cursor sweep). It was used to check the look without Screen Recording permission.

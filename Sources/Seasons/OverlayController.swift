@@ -8,7 +8,7 @@ final class OverlayController: NSObject, MTKViewDelegate {
     let displayID: CGDirectDisplayID
     private(set) var screen: NSScreen
     let world: SimulationWorld
-    private let window: OverlayWindow
+    private var window: OverlayWindow
     private let view: MTKView
     private let renderer: MetalRenderer
     private var batch = RenderBatch()
@@ -33,10 +33,10 @@ final class OverlayController: NSObject, MTKViewDelegate {
     /// Frames of "nothing happens" before the view stops rendering.
     private static let framesBeforeIdle = 45
 
-    init(screen: NSScreen, displayID: CGDirectDisplayID, context: MetalContext) {
+    init(screen: NSScreen, displayID: CGDirectDisplayID, context: MetalContext, desktopOnly: Bool) {
         self.displayID = displayID
         self.screen = screen
-        window = OverlayWindow(frame: screen.frame)
+        window = OverlayWindow(frame: screen.frame, desktopOnly: desktopOnly)
         view = MTKView(frame: NSRect(origin: .zero, size: screen.frame.size), device: context.device)
         renderer = MetalRenderer(context: context)
         let seed = UInt64(displayID) &* 0x9E37_79B9 ^ UInt64(Date().timeIntervalSince1970)
@@ -54,18 +54,36 @@ final class OverlayController: NSObject, MTKViewDelegate {
         window.contentView = view
         window.setFrame(screen.frame, display: false)
         window.orderFrontRegardless()
+        observeOcclusion()
 
         let link = view.displayLink(target: self, selector: #selector(displayTick(_:)))
         link.isPaused = true
         link.add(to: .main, forMode: .common)
         displayLink = link
         applyFrameRate()
+    }
 
+    private func observeOcclusion() {
+        if let occlusionToken { NotificationCenter.default.removeObserver(occlusionToken) }
         occlusionToken = NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.occlusionChanged() }
         }
+    }
+
+    /// Moves the Metal view into a new window with the other full-screen behavior. The
+    /// simulation, display link and renderer stay as they are.
+    private func replaceWindow(desktopOnly: Bool) {
+        let old = window
+        window = OverlayWindow(frame: screen.frame, desktopOnly: desktopOnly)
+        window.sharingType = old.sharingType
+        old.orderOut(nil)
+        old.contentView = nil
+        window.contentView = view
+        window.orderFrontRegardless()
+        observeOcclusion()
+        occlusionChanged()
     }
 
     func tearDown() {
@@ -96,6 +114,7 @@ final class OverlayController: NSObject, MTKViewDelegate {
         world.isMelting = settings.melting
         intensity = settings.intensity
         userPaused = settings.paused
+        if settings.desktopOnly != window.desktopOnly { replaceWindow(desktopOnly: settings.desktopOnly) }
         window.sharingType = settings.hideInScreenshots ? .none : .readOnly
         lastSpecs = []
         wake()

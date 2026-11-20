@@ -51,6 +51,7 @@ struct MenuTests {
         #expect(s == Settings())
         #expect(s.hideInScreenshots)
         #expect(s.accumulate)
+        #expect(!s.desktopOnly)
         #expect(s.effect == .snow)
         #expect(s.intensity == .medium)
     }
@@ -68,6 +69,7 @@ struct MenuTests {
         s.accumulate = false
         s.hideInScreenshots = false
         s.melting = true
+        s.desktopOnly = true
         store.save(s)
         #expect(store.load() == s)
     }
@@ -97,6 +99,10 @@ struct MenuTests {
 
         click("Hide in Screenshots and Screen Sharing", controller)
         #expect(!model.settings.hideInScreenshots && !reloaded().hideInScreenshots)
+
+        click("Only on Desktop, Not Over Full-Screen Apps", controller)
+        #expect(model.settings.desktopOnly && reloaded().desktopOnly)
+        #expect(item("Only on Desktop, Not Over Full-Screen Apps", in: controller.menu)?.state == .on)
 
         click("Melt Away", controller)
         #expect(model.settings.melting && reloaded().melting)
