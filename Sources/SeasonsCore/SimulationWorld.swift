@@ -33,7 +33,8 @@ public final class SimulationWorld {
     public private(set) var garden: FlowerGarden
     public private(set) var effect: EffectKind
     public private(set) var params: EffectParameters
-    public var accumulateOnWindowsAndDock = true
+    public var accumulateOnWindows = true
+    public var accumulateOnDock = true
     public var flowersEnabled = false {
         didSet { if !flowersEnabled { garden.setBase(nil) } }
     }
@@ -45,6 +46,8 @@ public final class SimulationWorld {
     private let wind: Wind
     private var spawnAccumulator: Float = 0
     private var lastMouse: Vec2?
+    /// Where the cursor was at the previous step; the path from there is swept when carving piles.
+    private var sweepStart: Vec2?
     public private(set) var mouseVelocity: Vec2 = .zero
     private var stash: [UInt64: (width: Float, heights: [Float])] = [:]
     private var stashOrder: [UInt64] = []
@@ -52,13 +55,22 @@ public final class SimulationWorld {
     private var lastSpawnIntensity: Float = 0
     private static let stashLimit = 64
 
-    public init(width: Float, height: Float, effect: EffectKind, seed: UInt64) {
+    /// True when another screen lies directly next to this one: particles leaving on that side are
+    /// handed over (`takeExited`) and nothing spawns in the strip outside that edge.
+    public var hasNeighborLeft = false
+    public var hasNeighborRight = false
+    private var exited: [Particle] = []
+    /// Cap for particles waiting to be taken, in case nobody collects them.
+    private static let exitedLimit = 512
+
+    /// `windSeed` lets several screens share one wind; by default each world has its own.
+    public init(width: Float, height: Float, effect: EffectKind, seed: UInt64, windSeed: UInt64? = nil) {
         self.width = width
         self.height = height
         self.effect = effect
         params = EffectCatalog.parameters(for: effect)
         rng = SeededRandom(seed: seed)
-        wind = Wind(seed: seed)
+        wind = Wind(seed: windSeed ?? seed)
         garden = FlowerGarden(seed: seed)
         ledges = [Ledge(spec: LedgeSpec(id: LedgeLayout.floorID, kind: .floor, minX: 0, maxX: width, y: 0,
                                         visibleSpans: [0...width]))]
@@ -129,7 +141,9 @@ public final class SimulationWorld {
                 for s in slide + shed { spills.append((s, fallVelocity, ledge.id)) }
             }
             for s in ledge.resize(toWidth: spec.maxX - spec.minX) { spills.append((s, .zero, ledge.id)) }
+            ledge.setCorners(left: spec.leftRadius, right: spec.rightRadius)
             ledge.applyVisibility(spec.visibleSpans)
+            ledge.applyCeilings(spec.ceilings)
             next.append(ledge)
         }
 
@@ -166,6 +180,25 @@ public final class SimulationWorld {
         }
     }
 
+    // MARK: - Neighbouring screens
+
+    /// Horizontal wind speed at `time`, in points per second.
+    public func windSpeed(at time: Double) -> Float {
+        wind.speed(at: time, strength: params.windStrength, gustiness: params.gustiness)
+    }
+
+    /// Particles that crossed the edge towards a neighbouring screen since the last call.
+    public func takeExited() -> [Particle] {
+        defer { exited.removeAll(keepingCapacity: true) }
+        return exited
+    }
+
+    /// Takes over a particle coming from a neighbouring screen (position in this screen's points).
+    public func adopt(_ particle: Particle) {
+        guard particles.count < params.maxParticles else { return }
+        particles.append(particle)
+    }
+
     // MARK: - Step
 
     /// True when nothing moves and nothing will move without new input.
@@ -180,7 +213,7 @@ public final class SimulationWorld {
         let r = EffectCatalog.mouseRadius
         if let b = garden.base, flowersEnabled, p.x > b.minX - r, p.x < b.maxX + r, p.y < b.y + 90 { return true }
         for l in ledges where p.x > l.minX - r && p.x < l.maxX + r {
-            if p.y > l.y - r && p.y < l.y + params.pile.maxHeight(for: l.kind) + r && l.totalMass > 0 { return true }
+            if p.y > l.y - l.maxDrop - r && p.y < l.y + params.pile.maxHeight(for: l.kind) + r && l.totalMass > 0 { return true }
         }
         return false
     }
@@ -189,7 +222,7 @@ public final class SimulationWorld {
         let dt = clamp(rawDt, 0, 1.0 / 20)
         guard dt > 0 else { return }
         updateMouse(input.mouse, dt: dt)
-        let windSpeed = wind.speed(at: time, strength: params.windStrength, gustiness: params.gustiness)
+        let windSpeed = self.windSpeed(at: time)
         lastSpawnIntensity = input.intensity
         spawn(dt: dt, intensity: input.intensity, windSpeed: windSpeed)
         advanceParticles(dt: dt, time: time, windSpeed: windSpeed, mouse: input.mouse)
@@ -203,6 +236,7 @@ public final class SimulationWorld {
     }
 
     private func updateMouse(_ mouse: Vec2?, dt: Float) {
+        sweepStart = lastMouse
         if let m = mouse, let last = lastMouse {
             let instant = (m - last) * (1 / dt)
             mouseVelocity = mouseVelocity * 0.5 + instant * 0.5
@@ -223,8 +257,9 @@ public final class SimulationWorld {
         // Spawn upwind so the screen fills evenly even with strong wind.
         let travelTime = height / max(params.fallSpeed.lowerBound, 1)
         let drift = clamp(windSpeed * travelTime * 0.5, -width, width)
-        let lo = min(0, -drift) - 20
-        let hi = max(width, width - drift) + 20
+        // Towards a neighbouring screen the particles come over from there instead.
+        let lo = hasNeighborLeft ? -20 : min(0, -drift) - 20
+        let hi = hasNeighborRight ? width + 20 : max(width, width - drift) + 20
         for _ in 0..<n {
             let size = rng.float(in: params.size)
             let fall = rng.float(in: params.fallSpeed)
@@ -295,6 +330,11 @@ public final class SimulationWorld {
                 }
                 dead = true
             }
+            if !dead, !p.isSplash, exited.count < Self.exitedLimit,
+               (hasNeighborLeft && p.position.x < 0) || (hasNeighborRight && p.position.x > width) {
+                exited.append(p)
+                dead = true
+            }
             if p.position.y < -60 || p.position.x < -260 || p.position.x > width + 260 { dead = true }
 
             if dead {
@@ -314,7 +354,8 @@ public final class SimulationWorld {
         var bestY = -Float.greatestFiniteMagnitude
         for li in ledges.indices {
             let l = ledges[li]
-            if !accumulateOnWindowsAndDock && l.kind != .floor { continue }
+            if l.kind == .window && !accumulateOnWindows { continue }
+            if l.kind == .dock && !accumulateOnDock { continue }
             if p.ignoreTimer > 0 && l.id == p.ignoreLedge { continue }
             guard b.x >= l.minX, b.x < l.maxX, let c = l.cellIndex(forX: b.x), l.visible[c] else { continue }
             let surface = l.surfaceY(c)
@@ -348,17 +389,30 @@ public final class SimulationWorld {
             } else {
                 _ = ledges[li].takeEndSpills(threshold: 0) // Mass leaving the screen is gone.
             }
-            if let m = mouse {
-                let spills = ledges[li].erode(center: m, radius: EffectCatalog.mouseRadius * 0.6, sideFraction: 0.4)
-                for s in spills {
-                    let outward = Vec2(s.x - m.x, 0)
-                    let dir: Float = outward.x >= 0 ? 1 : -1
-                    let v = mouseVelocity * 0.6 + Vec2(dir * rng.float(in: 40...160), rng.float(in: 80...220))
-                    emit(s, baseVelocity: v, scatter: 50, ignoreLedge: id, budget: &budget)
-                }
-            }
+            if let m = mouse { carve(ledgeAt: li, to: m, budget: &budget) }
         }
         // Stop once the piles are gone; when nothing new falls, also wait for the last flakes.
+    }
+
+    /// Carves ledge `li` along the cursor path since the last step. A fast cursor jumps far between
+    /// two frames, so the path is cut into circles that overlap and no strip of snow survives.
+    private func carve(ledgeAt li: Int, to mouse: Vec2, budget: inout Int) {
+        let radius = EffectCatalog.mouseRadius * 0.6
+        let from = sweepStart ?? mouse
+        let steps = clamp(Int(((mouse - from).length / (radius * 0.5)).rounded(.up)), 1, 40)
+        // Fast strokes throw most of the snow up as spray; slow ones push more of it aside.
+        let side = mix(0.4, 0.15, clamp(mouseVelocity.length / 1500, 0, 1))
+        let maxH = params.pile.maxHeight(for: ledges[li].kind)
+        let id = ledges[li].id
+        for k in 1...steps {
+            let center = from + (mouse - from) * (Float(k) / Float(steps))
+            let spills = ledges[li].erode(center: center, radius: radius, sideFraction: side, maxHeight: maxH)
+            for s in spills {
+                let dir: Float = s.x >= center.x ? 1 : -1
+                let v = mouseVelocity * 0.6 + Vec2(dir * rng.float(in: 40...160), rng.float(in: 80...220))
+                emit(s, baseVelocity: v, scatter: 50, ignoreLedge: id, budget: &budget)
+            }
+        }
     }
 
     private var averageParticleArea: Float {

@@ -17,12 +17,17 @@ enum PreviewRenderer {
         let effect: EffectKind
         let flowers: Bool
         let wipe: Bool
+        /// Cursor distance per frame (60 fps) of the wipe, in points.
+        var wipeStep: Float = 9
+        var windows = PreviewRenderer.windows
     }
 
     static func run(outputFolder: String, context: MetalContext) -> Int32 {
         let scenarios = [
             Scenario(name: "snow", effect: .snow, flowers: false, wipe: false),
             Scenario(name: "snow-wiped", effect: .snow, flowers: false, wipe: true),
+            Scenario(name: "snow-fast-wipe", effect: .snow, flowers: false, wipe: true, wipeStep: 40),
+            Scenario(name: "snow-overlap", effect: .snow, flowers: false, wipe: false, windows: overlapWindows),
             Scenario(name: "leaves", effect: .leaves, flowers: false, wipe: false),
             Scenario(name: "rain", effect: .rain, flowers: false, wipe: false),
             Scenario(name: "blossoms-flowers", effect: .blossoms, flowers: true, wipe: false),
@@ -44,12 +49,19 @@ enum PreviewRenderer {
         WindowFrame(id: 2, rect: Rect(x: 600, y: 160, width: 640, height: 380)),
     ]
 
+    /// A third window in front whose lower edge hangs 10 pt above the top of the front window.
+    private static let overlapWindows = [
+        WindowFrame(id: 3, rect: Rect(x: 300, y: 690, width: 300, height: 120)),
+        windows[0],
+        windows[1],
+    ]
+
     private static func simulate(_ s: Scenario) -> RenderBatch {
         let world = SimulationWorld(width: width, height: height, effect: s.effect, seed: 2026)
         world.flowersEnabled = s.flowers
         let geometry = ScreenGeometry(width: width, height: height, topInset: 30,
-                                      dock: DockFrame(rect: dock, edge: .bottom, isShown: true), windows: windows)
-        world.updateLedges(LedgeLayout.compute(geometry, includeWindowsAndDock: true), time: 0, removal: .spill)
+                                      dock: DockFrame(rect: dock, edge: .bottom, isShown: true), windows: s.windows)
+        world.updateLedges(LedgeLayout.compute(geometry), time: 0, removal: .spill)
         world.setGardenBase(GardenBase(minX: dock.minX + 6, maxX: dock.maxX - 6, y: dock.maxY))
         let dt: Float = 1.0 / 30
         let seconds: Float = s.effect == .rain ? 25 : 120
@@ -60,8 +72,8 @@ enum PreviewRenderer {
         }
         if s.wipe {
             // Sweep the cursor along the top of the front window, then let a moment pass.
-            for i in 0..<45 {
-                let mouse = Vec2(620 + Float(i) * 9, 545)
+            for i in 0..<Int(405 / s.wipeStep) {
+                let mouse = Vec2(620 + Float(i) * s.wipeStep, 545)
                 world.step(dt: 1.0 / 60, time: t, input: StepInput(mouse: mouse, intensity: 2.2))
                 t += 1.0 / 60
             }
@@ -72,12 +84,12 @@ enum PreviewRenderer {
         }
         var batch = RenderBatch()
         world.buildRenderBatch(&batch)
-        batch.pileVertices = background() + batch.pileVertices
+        batch.pileVertices = background(s.windows) + batch.pileVertices
         return batch
     }
 
     /// Synthetic desktop: gradient wallpaper, two windows with title bars and a Dock.
-    private static func background() -> [PileVertex] {
+    private static func background(_ windows: [WindowFrame]) -> [PileVertex] {
         var b = RenderBatch()
         b.appendQuad(x0: 0, x1: width, bottom0: 0, top0: height, bottom1: 0, top1: height,
                      colorBottom: RGBA(hex: 0x1D2B44), colorTop: RGBA(hex: 0x4B6386))
@@ -85,8 +97,16 @@ enum PreviewRenderer {
             let r = w.rect
             b.appendQuad(x0: r.minX, x1: r.maxX, bottom0: r.minY, top0: r.maxY - 28, bottom1: r.minY, top1: r.maxY - 28,
                          colorBottom: RGBA(hex: 0xF4F5F7), colorTop: RGBA(hex: 0xFAFAFB))
-            b.appendQuad(x0: r.minX, x1: r.maxX, bottom0: r.maxY - 28, top0: r.maxY, bottom1: r.maxY - 28, top1: r.maxY,
-                         colorBottom: RGBA(hex: 0xDCDEE3), colorTop: RGBA(hex: 0xE6E8EC))
+            // Title bar with rounded top corners: one-point columns along the arc.
+            let radius = LedgeLayout.windowCornerRadius
+            var x = r.minX
+            while x < r.maxX {
+                let inset = min(x + 0.5 - r.minX, r.maxX - x - 0.5)
+                let drop = inset < radius ? radius - (radius * radius - (radius - inset) * (radius - inset)).squareRoot() : 0
+                b.appendQuad(x0: x, x1: x + 1, bottom0: r.maxY - 28, top0: r.maxY - drop, bottom1: r.maxY - 28,
+                             top1: r.maxY - drop, colorBottom: RGBA(hex: 0xDCDEE3), colorTop: RGBA(hex: 0xE6E8EC))
+                x += 1
+            }
         }
         b.appendQuad(x0: dock.minX, x1: dock.maxX, bottom0: 4, top0: dock.maxY, bottom1: 4, top1: dock.maxY,
                      colorBottom: RGBA(1, 1, 1, 0.22), colorTop: RGBA(1, 1, 1, 0.32))

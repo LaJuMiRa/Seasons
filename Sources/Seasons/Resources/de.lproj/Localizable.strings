@@ -23,9 +23,13 @@
 "Variable" = "Variabel";
 "Clear Now" = "Jetzt aufräumen";
 "Melt Away" = "Schmelzen lassen";
-"Pile Up on Windows and Dock" = "Auf Fenstern und Dock liegen bleiben";
+"Pile Up on Windows" = "Auf Fenstern liegen bleiben";
+"Pile Up on Dock" = "Auf dem Dock liegen bleiben";
+"Pointer Pushes Effects Away" = "Mauszeiger schiebt Effekte weg";
 "Hide in Screenshots and Screen Sharing" = "In Bildschirmfotos und Bildschirmfreigaben ausblenden";
 "Only on Desktop, Not Over Full-Screen Apps" = "Nur auf dem Schreibtisch, nicht über Vollbild-Apps";
+"Options" = "Optionen";
+"Hide Effects in Apps" = "Effekte in Apps ausblenden";
 "Launch at Login" = "Bei Anmeldung starten";
 "Approve in Login Items Settings…" = "In den Anmeldeobjekt-Einstellungen erlauben …";
 "Window detection: active" = "Fenstererkennung: aktiv";

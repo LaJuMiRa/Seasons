@@ -57,10 +57,20 @@ public enum LedgeLayout {
     static let minimumSpan: Float = 24
     /// Free space needed above a window edge, in points.
     static let headroom: Float = 8
+    /// Corner radius of a window, in points. macOS does not expose it; measured from screenshots of
+    /// toolbar and title-bar windows on macOS 27 (about 10 to 14 pt).
+    public static let windowCornerRadius: Float = 12
+    /// The Dock's corner radius as a fraction of its height, capped (about 21 pt for a 70 pt Dock).
+    static let dockCornerRatio: Float = 0.3
+    static let dockCornerMax: Float = 28
+    /// How far above an edge a window in front can hang and still hide the top of a pile, in points.
+    /// A little more than the tallest pile (snow: 30 pt on the screen bottom).
+    static let clipBand: Float = 40
 
     public static func windowLedgeID(_ windowID: UInt32) -> UInt64 { windowIDBase | UInt64(windowID) }
 
-    public static func compute(_ g: ScreenGeometry, includeWindowsAndDock: Bool) -> [LedgeSpec] {
+    public static func compute(_ g: ScreenGeometry, includeWindows: Bool = true,
+                               includeDock: Bool = true) -> [LedgeSpec] {
         var specs: [LedgeSpec] = []
         let bottomDock = g.dock.flatMap { $0.edge == .bottom && $0.isShown ? $0.rect : nil }
 
@@ -71,17 +81,17 @@ public enum LedgeLayout {
         }
         specs.append(LedgeSpec(id: floorID, kind: .floor, minX: 0, maxX: g.width, y: 0, visibleSpans: floorSpans))
 
-        guard includeWindowsAndDock else { return specs }
-
-        if let dock = bottomDock, dock.width > minimumSpan {
+        if includeDock, let dock = bottomDock, dock.width > minimumSpan {
+            let radius = min(dock.height * dockCornerRatio, dockCornerMax)
             specs.append(LedgeSpec(id: dockID, kind: .dock, minX: dock.minX, maxX: dock.maxX, y: dock.maxY,
-                                   visibleSpans: [dock.minX...dock.maxX]))
+                                   visibleSpans: [dock.minX...dock.maxX], leftRadius: radius, rightRadius: radius))
         }
 
         // Things that sit above all normal windows.
         var fixedOccluders: [Rect] = [Rect(x: 0, y: g.height - g.topInset, width: g.width, height: g.topInset)]
         if let dock = g.dock, dock.isShown { fixedOccluders.append(dock.rect) }
 
+        guard includeWindows else { return specs }
         let ceiling = g.height - g.topInset - headroom
         for (index, window) in g.windows.enumerated() {
             let top = window.rect.maxY
@@ -91,15 +101,25 @@ public enum LedgeLayout {
             guard maxX - minX >= minimumSpan else { continue }
 
             var spans = [minX...maxX]
+            var ceilings: [Ceiling] = []
             let occluders = fixedOccluders + g.windows[..<index].map(\.rect)
-            for o in occluders where o.minY <= top + 3 && o.maxY >= top - 1 {
-                spans = subtract(o.minX...o.maxX, from: spans)
-                if spans.isEmpty { break }
+            for o in occluders {
+                if o.minY <= top + 3 && o.maxY >= top - 1 {
+                    spans = subtract(o.minX...o.maxX, from: spans)
+                } else if o.minY > top + 3 && o.minY < top + clipBand {
+                    let lo = max(minX, o.minX), hi = min(maxX, o.maxX)
+                    if lo < hi { ceilings.append(Ceiling(span: lo...hi, height: o.minY - top)) }
+                }
             }
+            // A completely covered window keeps its ledge, with nothing visible: the pile stays
+            // hidden behind the window in front instead of being thrown out over it.
             spans = spans.filter { $0.upperBound - $0.lowerBound >= minimumSpan }
-            guard !spans.isEmpty else { continue }
+            // Only a real window corner is round: where the window runs on beyond the screen it is not.
             specs.append(LedgeSpec(id: windowLedgeID(window.id), kind: .window, minX: minX, maxX: maxX,
-                                   y: top, visibleSpans: spans))
+                                   y: top, visibleSpans: spans,
+                                   leftRadius: window.rect.minX >= 0 ? windowCornerRadius : 0,
+                                   rightRadius: window.rect.maxX <= g.width ? windowCornerRadius : 0,
+                                   ceilings: ceilings))
         }
         return specs
     }

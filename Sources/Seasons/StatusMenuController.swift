@@ -77,22 +77,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(action(L("Melt Away"), #selector(toggleMelt), checked: s.melting))
 
         menu.addItem(.separator())
-        menu.addItem(action(L("Pile Up on Windows and Dock"), #selector(toggleAccumulate), checked: s.accumulate))
-        menu.addItem(action(L("Hide in Screenshots and Screen Sharing"), #selector(toggleHide),
-                            checked: s.hideInScreenshots))
-        menu.addItem(action(L("Only on Desktop, Not Over Full-Screen Apps"), #selector(toggleDesktopOnly),
-                            checked: s.desktopOnly))
-        menu.addItem(action(L("Launch at Login"), #selector(toggleLogin), checked: LoginItem.isEnabled))
-        if LoginItem.needsApproval {
-            menu.addItem(action(L("Approve in Login Items Settings…"), #selector(openLoginSettings)))
-        }
-
-        menu.addItem(.separator())
-        if windows.isDetectionAvailable {
-            let status = NSMenuItem(title: L("Window detection: active"), action: nil, keyEquivalent: "")
-            status.isEnabled = false
-            menu.addItem(status)
-        } else {
+        menu.addItem(optionsMenu(settings: s))
+        // A working window detection needs no room in the menu; a broken one needs a visible hint.
+        if !windows.isDetectionAvailable {
             let status = NSMenuItem(title: L("Window detection unavailable – only Dock and screen edge"),
                                     action: nil, keyEquivalent: "")
             status.isEnabled = false
@@ -103,6 +90,56 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(action(L("About Seasons"), #selector(showAbout)))
         menu.addItem(action(L("Quit Seasons"), #selector(quit), key: "q"))
+    }
+
+    /// Rarely changed switches, grouped: piles, visibility, system.
+    private func optionsMenu(settings s: Settings) -> NSMenuItem {
+        let parent = NSMenuItem(title: L("Options"), action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        sub.autoenablesItems = false
+        sub.addItem(action(L("Pile Up on Windows"), #selector(togglePileOnWindows), checked: s.pileOnWindows))
+        sub.addItem(action(L("Pile Up on Dock"), #selector(togglePileOnDock), checked: s.pileOnDock))
+        sub.addItem(action(L("Pointer Pushes Effects Away"), #selector(togglePointer), checked: s.pointerInteraction))
+        sub.addItem(.separator())
+        sub.addItem(hiddenAppsMenu(current: s.hiddenInApps))
+        sub.addItem(action(L("Only on Desktop, Not Over Full-Screen Apps"), #selector(toggleDesktopOnly),
+                           checked: s.desktopOnly))
+        sub.addItem(action(L("Hide in Screenshots and Screen Sharing"), #selector(toggleHide),
+                           checked: s.hideInScreenshots))
+        sub.addItem(.separator())
+        sub.addItem(action(L("Launch at Login"), #selector(toggleLogin), checked: LoginItem.isEnabled))
+        if LoginItem.needsApproval {
+            sub.addItem(action(L("Approve in Login Items Settings…"), #selector(openLoginSettings)))
+        }
+        if windows.isDetectionAvailable {
+            let status = NSMenuItem(title: L("Window detection: active"), action: nil, keyEquivalent: "")
+            status.isEnabled = false
+            sub.addItem(status)
+        }
+        parent.submenu = sub
+        return parent
+    }
+
+    /// Running apps plus apps that are already on the list, so an entry can always be removed.
+    private func hiddenAppsMenu(current: Set<String>) -> NSMenuItem {
+        let parent = NSMenuItem(title: L("Hide Effects in Apps"), action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        var apps: [String: String] = [:]
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
+            if let id = app.bundleIdentifier, id != Bundle.main.bundleIdentifier { apps[id] = app.localizedName ?? id }
+        }
+        for id in current where apps[id] == nil {
+            let name = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)?
+                .deletingPathExtension().lastPathComponent
+            apps[id] = name ?? id
+        }
+        for (id, name) in apps.sorted(by: { $0.value.localizedCaseInsensitiveCompare($1.value) == .orderedAscending }) {
+            let mi = action(name, #selector(toggleHiddenApp(_:)), checked: current.contains(id))
+            mi.representedObject = id
+            sub.addItem(mi)
+        }
+        parent.submenu = sub
+        return parent
     }
 
     private func amountMenu(current: Intensity) -> NSMenuItem {
@@ -160,9 +197,18 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     @objc private func toggleAutomatic() { model.update { $0.automatic.toggle() } }
     @objc private func toggleSummerRain() { model.update { $0.rainInSummer.toggle() } }
     @objc private func togglePause() { model.update { $0.paused.toggle() } }
-    @objc private func toggleAccumulate() { model.update { $0.accumulate.toggle() } }
+    @objc private func togglePileOnWindows() { model.update { $0.pileOnWindows.toggle() } }
+    @objc private func togglePileOnDock() { model.update { $0.pileOnDock.toggle() } }
+    @objc private func togglePointer() { model.update { $0.pointerInteraction.toggle() } }
     @objc private func toggleHide() { model.update { $0.hideInScreenshots.toggle() } }
     @objc private func toggleDesktopOnly() { model.update { $0.desktopOnly.toggle() } }
+    @objc private func toggleHiddenApp(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        model.update {
+            if $0.hiddenInApps.contains(id) { $0.hiddenInApps.remove(id) } else { $0.hiddenInApps.insert(id) }
+        }
+    }
+
     @objc private func clearNow() { model.send(.clear) }
     @objc private func toggleMelt() { model.update { $0.melting.toggle() } }
 

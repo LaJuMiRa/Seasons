@@ -60,7 +60,7 @@ struct SimulationTests {
     @Test("With accumulation off, nothing stays on windows")
     func accumulationOff() {
         let w = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 7)
-        w.accumulateOnWindowsAndDock = false
+        w.accumulateOnWindows = false
         w.updateLedges([floorSpec, windowSpec(id: 1, x: 200, y: 300)], time: 0, removal: .spill)
         run(w, seconds: 20, intensity: 2)
         #expect(w.ledges.first { $0.kind == .window }!.totalMass == 0)
@@ -96,6 +96,38 @@ struct SimulationTests {
         #expect(after < before * 0.8)
         #expect(w.particles.count > airborneBefore)
         #expect(w.particles.contains { $0.velocity.y > 0 }) // thrown upwards
+    }
+
+    @Test("A very fast wipe clears the whole path and leaves no cliff behind", arguments: [30, 60])
+    func fastWipeLeavesNoBar(fps: Int) {
+        let w = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 5)
+        w.updateLedges([floorSpec], time: 0, removal: .spill)
+        run(w, seconds: 60, intensity: 3)
+        run(w, seconds: 4, intensity: 0, start: 60)
+        let floor = { w.ledges[0] }
+        let before = floor().heights
+        // 2400 pt/s along the floor: 80 pt per frame at 30 fps, 40 pt at 60 fps.
+        let dt = 1 / Float(fps)
+        var t = 64.0
+        var x: Float = 100
+        while x < 700 {
+            w.step(dt: dt, time: t, input: StepInput(mouse: Vec2(x, 6), intensity: 0))
+            x += 2400 * dt
+            t += Double(dt)
+        }
+        for _ in 0..<(fps / 2) { // half a second without the cursor
+            w.step(dt: dt, time: t, input: StepInput(mouse: nil, intensity: 0))
+            t += Double(dt)
+        }
+        let after = floor().heights
+        let lo = floor().cellIndex(forX: 160)!, hi = floor().cellIndex(forX: 640)!
+        let beforeMean = before[lo...hi].reduce(0, +) / Float(hi - lo + 1)
+        let afterMean = after[lo...hi].reduce(0, +) / Float(hi - lo + 1)
+        #expect(beforeMean > 15)
+        #expect(afterMean < beforeMean * 0.25) // no uncleared strips between the cursor positions
+        let steepest = zip(after, after.dropFirst()).map { abs($0 - $1) }.max() ?? 0
+        #expect(steepest < 6) // no cliff or single-column bar
+        #expect((after.max() ?? 0) <= EffectCatalog.snow.pile.maxHeightFloor)
     }
 
     @Test("Moving a window fast makes the pile slide and fall off")
@@ -134,6 +166,48 @@ struct SimulationTests {
                 #expect(abs(restored - mass) < mass * 0.05)
             }
         }
+    }
+
+    @Test("A window that gets covered keeps its pile hidden and spills nothing; it returns when uncovered")
+    func coveredWindowKeepsPile() {
+        let w = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 41)
+        let visible = windowSpec(id: 1, x: 100, y: 300)
+        w.updateLedges([floorSpec, visible], time: 0, removal: .spill)
+        run(w, seconds: 40, intensity: 3)
+        run(w, seconds: 5, intensity: 0, start: 40)
+        let mass = w.ledges.first { $0.kind == .window }!.totalMass
+        #expect(mass > 100)
+        let airborne = w.particles.count
+
+        var hidden = visible
+        hidden.visibleSpans = []
+        w.updateLedges([floorSpec, hidden], time: 45, removal: .spill)
+        #expect(w.particles.count == airborne) // no flakes fly out over the window that covers it
+        #expect(w.ledges.first { $0.kind == .window }!.totalMass == mass)
+
+        run(w, seconds: 10, intensity: 3, start: 45) // new snow does not land on a covered edge
+        #expect(w.ledges.first { $0.kind == .window }!.totalMass == mass)
+        var batch = RenderBatch()
+        w.buildRenderBatch(&batch)
+        #expect(batch.pileVertices.allSatisfy { v in !(v.x > 110 && v.x < 490 && v.y > 300.5) })
+
+        w.updateLedges([floorSpec, visible], time: 60, removal: .spill)
+        #expect(w.ledges.first { $0.kind == .window }!.totalMass == mass) // pile is back
+    }
+
+    @Test("Closing a window that was covered does not throw snow out over the windows in front")
+    func closingCoveredWindowSpillsNothing() {
+        let w = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 43)
+        let visible = windowSpec(id: 1, x: 100, y: 300)
+        w.updateLedges([floorSpec, visible], time: 0, removal: .spill)
+        run(w, seconds: 40, intensity: 3)
+        run(w, seconds: 5, intensity: 0, start: 40)
+        var hidden = visible
+        hidden.visibleSpans = []
+        w.updateLedges([floorSpec, hidden], time: 45, removal: .spill)
+        let airborne = w.particles.count
+        w.updateLedges([floorSpec], time: 46, removal: .spill)
+        #expect(w.particles.count == airborne)
     }
 
     @Test("The floor never exceeds its maximum, even after sweeping back and forth", arguments: EffectKind.allCases)
@@ -231,5 +305,54 @@ struct SimulationTests {
         #expect(batch.sprites.count >= w.particles.count)
         #expect(MemoryLayout<SpriteInstance>.stride == 48)
         #expect(MemoryLayout<PileVertex>.stride == 24)
+    }
+}
+
+@Suite("Multiple screens")
+struct MultiScreenTests {
+    @Test("Worlds with the same wind seed see the same wind")
+    func sharedWind() {
+        let a = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 1, windSeed: 7)
+        let b = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 2, windSeed: 7)
+        #expect(a.windSpeed(at: 123.4) == b.windSpeed(at: 123.4))
+    }
+
+    @Test("A particle that leaves towards a neighbour is handed over, not deleted")
+    func handOff() {
+        let world = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 3)
+        world.hasNeighborRight = true
+        world.adopt(Particle.testFlake(at: Vec2(795, 300), velocity: Vec2(200, -10)))
+        run(world, seconds: 0.2, intensity: 0)
+        let out = world.takeExited()
+        #expect(out.count == 1)
+        #expect((out.first?.position.x ?? 0) > 800)
+        #expect(world.particles.isEmpty)
+        #expect(world.takeExited().isEmpty)
+    }
+
+    @Test("Without a neighbour a particle stays on its screen")
+    func noNeighbour() {
+        let world = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 3)
+        world.adopt(Particle.testFlake(at: Vec2(795, 300), velocity: Vec2(200, -10)))
+        run(world, seconds: 0.2, intensity: 0)
+        #expect(world.takeExited().isEmpty)
+        #expect(world.particles.count == 1)
+    }
+
+    @Test("Spawning does not fill the strip next to a neighbour")
+    func noSpawnBeyondConnectedEdge() {
+        let world = SimulationWorld(width: 800, height: 600, effect: .snow, seed: 5)
+        world.hasNeighborLeft = true
+        world.hasNeighborRight = true
+        run(world, seconds: 5, intensity: 2)
+        #expect(world.particles.allSatisfy { $0.position.x >= -25 && $0.position.x <= 825 })
+    }
+}
+
+extension Particle {
+    static func testFlake(at position: Vec2, velocity: Vec2) -> Particle {
+        Particle(position: position, velocity: velocity, size: 4, rotation: 0, spin: 0, fallSpeed: 40,
+                 swayPhase: 0, swayFrequency: 0.5, shape: .flake, color: RGBA(1, 1, 1, 1), life: .infinity,
+                 ignoreLedge: 0, ignoreTimer: 0, variant: 0)
     }
 }

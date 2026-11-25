@@ -9,7 +9,13 @@ struct Settings: Equatable {
     var rainInSummer = false
     var intensity: Intensity = .medium
     var paused = false
-    var accumulate = true
+    /// Piles on window tops and on the Dock (the screen bottom always collects).
+    var pileOnWindows = true
+    var pileOnDock = true
+    /// Cursor pushes falling particles away, digs into piles and bends flowers.
+    var pointerInteraction = true
+    /// Bundle identifiers of apps that hide the effects while they are in front.
+    var hiddenInApps: Set<String> = []
     var hideInScreenshots = true
     /// "Melt Away" switch: while on, nothing stays lying around.
     var melting = false
@@ -28,7 +34,11 @@ struct SettingsStore {
         static let rainInSummer = "rainInSummer"
         static let intensity = "intensity"
         static let paused = "paused"
-        static let accumulate = "accumulate"
+        static let accumulate = "accumulate" // legacy: one switch for windows and Dock
+        static let pileOnWindows = "pileOnWindows"
+        static let pileOnDock = "pileOnDock"
+        static let pointerInteraction = "pointerInteraction"
+        static let hiddenInApps = "hiddenInApps"
         static let hideInScreenshots = "hideInScreenshots"
         static let melting = "melting"
         static let desktopOnly = "desktopOnly"
@@ -46,7 +56,11 @@ struct SettingsStore {
         s.automatic = bool(Key.automatic, default: s.automatic)
         s.rainInSummer = bool(Key.rainInSummer, default: s.rainInSummer)
         s.paused = bool(Key.paused, default: s.paused)
-        s.accumulate = bool(Key.accumulate, default: s.accumulate)
+        let legacy = bool(Key.accumulate, default: true)
+        s.pileOnWindows = bool(Key.pileOnWindows, default: legacy)
+        s.pileOnDock = bool(Key.pileOnDock, default: legacy)
+        s.pointerInteraction = bool(Key.pointerInteraction, default: s.pointerInteraction)
+        s.hiddenInApps = Set(defaults.stringArray(forKey: Key.hiddenInApps) ?? [])
         s.hideInScreenshots = bool(Key.hideInScreenshots, default: s.hideInScreenshots)
         s.melting = bool(Key.melting, default: s.melting)
         s.desktopOnly = bool(Key.desktopOnly, default: s.desktopOnly)
@@ -60,7 +74,10 @@ struct SettingsStore {
         defaults.set(s.automatic, forKey: Key.automatic)
         defaults.set(s.rainInSummer, forKey: Key.rainInSummer)
         defaults.set(s.paused, forKey: Key.paused)
-        defaults.set(s.accumulate, forKey: Key.accumulate)
+        defaults.set(s.pileOnWindows, forKey: Key.pileOnWindows)
+        defaults.set(s.pileOnDock, forKey: Key.pileOnDock)
+        defaults.set(s.pointerInteraction, forKey: Key.pointerInteraction)
+        defaults.set(s.hiddenInApps.sorted(), forKey: Key.hiddenInApps)
         defaults.set(s.hideInScreenshots, forKey: Key.hideInScreenshots)
         defaults.set(s.melting, forKey: Key.melting)
         defaults.set(s.desktopOnly, forKey: Key.desktopOnly)

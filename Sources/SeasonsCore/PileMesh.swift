@@ -29,8 +29,10 @@ enum PileMesh {
         let clearTop = top.withAlpha(0)
         let maxH = max(l.heights.max() ?? 1, 1)
         for i in 0..<(n - 1) where l.visible[i] && l.visible[i + 1] {
-            let h0 = l.heights[i] * scale
-            let h1 = l.heights[i + 1] * scale
+            // A window in front that hangs into the pile hides everything above its lower edge.
+            let h0 = min(l.heights[i] * scale, l.ceiling[i])
+            let h1 = min(l.heights[i + 1] * scale, l.ceiling[i + 1])
+            let clipped = l.heights[i] * scale > l.ceiling[i] || l.heights[i + 1] * scale > l.ceiling[i + 1]
             guard h0 > 0.05 || h1 > 0.05 else { continue }
             let x0 = l.cellCenterX(i)
             let x1 = l.cellCenterX(i + 1)
@@ -38,11 +40,15 @@ enum PileMesh {
             let top0 = blend(bottom, top, min(1, 0.35 + h0 / maxH))
             let top1 = blend(bottom, top, min(1, 0.35 + h1 / maxH))
             let topColor = blend(top0, top1, 0.5)
-            batch.appendQuad(x0: x0, x1: x1, bottom0: l.y, top0: l.y + h0, bottom1: l.y, top1: l.y + h1,
+            let r0 = l.restY(i)
+            let r1 = l.restY(i + 1)
+            batch.appendQuad(x0: x0, x1: x1, bottom0: r0, top0: r0 + h0, bottom1: r1, top1: r1 + h1,
                              colorBottom: bottom, colorTop: topColor)
-            batch.appendQuad(x0: x0, x1: x1, bottom0: l.y + h0, top0: l.y + h0 + fringe,
-                             bottom1: l.y + h1, top1: l.y + h1 + fringe,
-                             colorBottom: topColor, colorTop: clearTop)
+            if !clipped { // no soft fringe along a cut that a window edge covers
+                batch.appendQuad(x0: x0, x1: x1, bottom0: r0 + h0, top0: r0 + h0 + fringe,
+                                 bottom1: r1 + h1, top1: r1 + h1 + fringe,
+                                 colorBottom: topColor, colorTop: clearTop)
+            }
         }
     }
 
@@ -59,7 +65,7 @@ enum PileMesh {
                 guard unitHash(seed, key) < probability else { continue }
                 let layerY = Float(k) * spacing
                 let fade = clamp((h - layerY) / spacing, 0, 1)
-                guard fade > 0.05 else { continue }
+                guard fade > 0.05, layerY < l.ceiling[i] else { continue }
                 let jx = (unitHash(seed ^ 0x51, key) - 0.5) * l.cellWidth * 3
                 let jy = unitHash(seed ^ 0x77, key) * spacing * 0.8
                 let size = mix(params.size.lowerBound, params.size.upperBound, unitHash(seed ^ 0x13, key)) * 0.9
@@ -68,7 +74,7 @@ enum PileMesh {
                 let shade = 0.72 + 0.28 * min(1, layerY / max(h, 1) + 0.3)
                 color = RGBA(color.r * shade, color.g * shade, color.b * shade, color.a * fade)
                 batch.sprites.append(SpriteInstance(
-                    x: l.cellCenterX(i) + jx, y: l.y + layerY + jy + size * 0.2,
+                    x: l.cellCenterX(i) + jx, y: l.restY(i) + layerY + jy + size * 0.2,
                     width: size, height: size * params.aspect * 0.8, rotation: angle,
                     shape: params.shape, param: Float(hash32(seed, key) & 1), color: color))
             }
@@ -82,9 +88,10 @@ enum PileMesh {
             let key = UInt32(i)
             guard unitHash(seed, key) < chance else { continue }
             let h = l.heights[i]
+            guard h < l.ceiling[i] else { continue }
             let r = min(l.kind == .floor ? 3.5 : 5, 1.6 + h * 0.9) * (0.7 + 0.3 * unitHash(seed ^ 0x9, key))
             batch.sprites.append(SpriteInstance(
-                x: l.cellCenterX(i), y: l.y + h + r * 0.35, width: r * 2, height: r * 1.7, rotation: 0,
+                x: l.cellCenterX(i), y: l.restY(i) + h + r * 0.35, width: r * 2, height: r * 1.7, rotation: 0,
                 shape: .bead, color: RGBA(0.85, 0.92, 1, 0.8)))
         }
     }

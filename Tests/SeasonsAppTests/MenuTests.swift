@@ -50,7 +50,7 @@ struct MenuTests {
         let s = SettingsStore(defaults: defaults).load()
         #expect(s == Settings())
         #expect(s.hideInScreenshots)
-        #expect(s.accumulate)
+        #expect(s.pileOnWindows && s.pileOnDock && s.pointerInteraction)
         #expect(!s.desktopOnly)
         #expect(s.effect == .snow)
         #expect(s.intensity == .medium)
@@ -66,7 +66,9 @@ struct MenuTests {
         s.rainInSummer = true
         s.intensity = .variable
         s.paused = true
-        s.accumulate = false
+        s.pileOnWindows = false
+        s.pileOnDock = false
+        s.pointerInteraction = false
         s.hideInScreenshots = false
         s.melting = true
         s.desktopOnly = true
@@ -94,8 +96,14 @@ struct MenuTests {
         #expect(model.settings.flowers && reloaded().flowers)
         #expect(item("Flowers on the Dock", in: controller.menu)?.state == .on)
 
-        click("Pile Up on Windows and Dock", controller)
-        #expect(!model.settings.accumulate && !reloaded().accumulate)
+        click("Pile Up on Windows", controller)
+        #expect(!model.settings.pileOnWindows && !reloaded().pileOnWindows && model.settings.pileOnDock)
+        click("Pile Up on Dock", controller)
+        #expect(!model.settings.pileOnDock && !reloaded().pileOnDock)
+
+        click("Pointer Pushes Effects Away", controller)
+        #expect(!model.settings.pointerInteraction && !reloaded().pointerInteraction)
+        #expect(item("Pointer Pushes Effects Away", in: controller.menu)?.state == .off)
 
         click("Hide in Screenshots and Screen Sharing", controller)
         #expect(!model.settings.hideInScreenshots && !reloaded().hideInScreenshots)
@@ -115,6 +123,16 @@ struct MenuTests {
         // The summer-rain option only appears in automatic mode.
         click("Rain in Summer", controller)
         #expect(model.settings.rainInSummer && reloaded().rainInSummer)
+    }
+
+    @Test("The main menu stays short; rarely used switches live in Options")
+    func compactMenu() {
+        let (_, controller) = makeMenu()
+        let top = controller.menu.items.filter { !$0.isSeparatorItem }
+        #expect(top.count <= 14, "top level has \(top.count) rows")
+        let options = item("Options", in: controller.menu)?.submenu
+        #expect(options?.items.contains { $0.title == "Pile Up on Dock" } == true)
+        #expect(!controller.menu.items.contains { $0.title == "Pile Up on Dock" })
     }
 
     @Test("Pause turns into Resume and back")

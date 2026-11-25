@@ -1,5 +1,17 @@
 import Foundation
 
+/// A window in front that hangs into the space above a ledge: the pile is hidden behind it from
+/// `height` points above the edge, within `span`.
+public struct Ceiling: Equatable, Sendable {
+    public var span: ClosedRange<Float>
+    public var height: Float
+
+    public init(span: ClosedRange<Float>, height: Float) {
+        self.span = span
+        self.height = height
+    }
+}
+
 /// Description of a horizontal surface that can carry a pile, produced by `LedgeLayout`.
 public struct LedgeSpec: Equatable, Sendable {
     public var id: UInt64
@@ -10,15 +22,24 @@ public struct LedgeSpec: Equatable, Sendable {
     public var y: Float
     /// Absolute x ranges where the surface is visible (not covered by a window in front).
     public var visibleSpans: [ClosedRange<Float>]
+    /// Radius of the rounded top corners at the left and right end (0 = square end).
+    public var leftRadius: Float
+    public var rightRadius: Float
+    /// Windows in front that cover the upper part of a pile (see `Ceiling`).
+    public var ceilings: [Ceiling]
 
     public init(id: UInt64, kind: LedgeKind, minX: Float, maxX: Float, y: Float,
-                visibleSpans: [ClosedRange<Float>]) {
+                visibleSpans: [ClosedRange<Float>], leftRadius: Float = 0, rightRadius: Float = 0,
+                ceilings: [Ceiling] = []) {
         self.id = id
         self.kind = kind
         self.minX = minX
         self.maxX = maxX
         self.y = y
         self.visibleSpans = visibleSpans
+        self.leftRadius = leftRadius
+        self.rightRadius = rightRadius
+        self.ceilings = ceilings
     }
 }
 
@@ -42,6 +63,13 @@ public struct Ledge: Sendable {
     public private(set) var y: Float
     public private(set) var heights: [Float]
     public private(set) var visible: [Bool]
+    /// How far the real edge lies below `y` in each cell. Zero on a straight edge; towards a rounded
+    /// corner it follows the arc, so piles rest on the curve instead of hanging in the air.
+    public private(set) var drop: [Float]
+    public private(set) var leftRadius: Float
+    public private(set) var rightRadius: Float
+    /// Highest drawn height of the pile per cell (`.infinity` when nothing hangs over it).
+    public private(set) var ceiling: [Float]
     /// Mass waiting at the left/right end until it is enough to drop a particle.
     var pendingSpillLeft: Float = 0
     var pendingSpillRight: Float = 0
@@ -55,7 +83,12 @@ public struct Ledge: Sendable {
         let count = max(1, Int(((spec.maxX - spec.minX) / cellWidth).rounded()))
         heights = Array(repeating: 0, count: count)
         visible = Array(repeating: true, count: count)
+        leftRadius = spec.leftRadius
+        rightRadius = spec.rightRadius
+        drop = Self.cornerDrops(count: count, cellWidth: cellWidth, left: spec.leftRadius, right: spec.rightRadius)
+        ceiling = Array(repeating: .infinity, count: count)
         applyVisibility(spec.visibleSpans)
+        applyCeilings(spec.ceilings)
     }
 
     public var count: Int { heights.count }
@@ -72,8 +105,39 @@ public struct Ledge: Sendable {
     @inline(__always)
     public func cellCenterX(_ i: Int) -> Float { minX + (Float(i) + 0.5) * cellWidth }
 
+    /// Height of the edge a pile rests on in cell `i` (lower than `y` on a rounded corner).
     @inline(__always)
-    public func surfaceY(_ i: Int) -> Float { y + heights[i] }
+    public func restY(_ i: Int) -> Float { y - drop[i] }
+
+    @inline(__always)
+    public func surfaceY(_ i: Int) -> Float { y - drop[i] + heights[i] }
+
+    /// Deepest point of the corners; the pile can reach this far below `y`.
+    public var maxDrop: Float { max(drop.first ?? 0, drop.last ?? 0) }
+
+    /// Arc profile of the two corners for `count` cells of width `cellWidth`.
+    static func cornerDrops(count: Int, cellWidth: Float, left: Float, right: Float) -> [Float] {
+        guard left > 0 || right > 0 else { return Array(repeating: 0, count: count) }
+        let width = Float(count) * cellWidth
+        func arc(_ distance: Float, _ radius: Float) -> Float {
+            guard radius > 0, distance < radius else { return 0 }
+            let r = min(radius, width / 2)
+            let d = min(distance, r)
+            return r - max(0, r * r - (r - d) * (r - d)).squareRoot()
+        }
+        return (0..<count).map { i in
+            let x = (Float(i) + 0.5) * cellWidth
+            return max(arc(x, left), arc(width - x, right))
+        }
+    }
+
+    /// Updates the corner radii (a window can slide partly off the screen).
+    mutating func setCorners(left: Float, right: Float) {
+        guard left != leftRadius || right != rightRadius else { return }
+        leftRadius = left
+        rightRadius = right
+        drop = Self.cornerDrops(count: heights.count, cellWidth: cellWidth, left: left, right: right)
+    }
 
     // MARK: - Geometry updates
 
@@ -81,6 +145,13 @@ public struct Ledge: Sendable {
         for i in visible.indices {
             let cx = cellCenterX(i)
             visible[i] = spans.contains { $0.contains(cx) }
+        }
+    }
+
+    mutating func applyCeilings(_ ceilings: [Ceiling]) {
+        for i in ceiling.indices {
+            let cx = cellCenterX(i)
+            ceiling[i] = ceilings.reduce(Float.infinity) { $1.span.contains(cx) ? min($0, $1.height) : $0 }
         }
     }
 
@@ -98,14 +169,17 @@ public struct Ledge: Sendable {
         var spills: [Spill] = []
         if newCount < heights.count {
             for i in newCount..<heights.count where heights[i] > 0 {
-                spills.append(Spill(x: cellCenterX(i), y: y + heights[i], mass: heights[i] * cellWidth))
+                spills.append(Spill(x: cellCenterX(i), y: surfaceY(i), mass: heights[i] * cellWidth))
             }
             heights.removeLast(heights.count - newCount)
             visible.removeLast(visible.count - newCount)
+            ceiling.removeLast(ceiling.count - newCount)
         } else {
             heights.append(contentsOf: repeatElement(0, count: newCount - heights.count))
             visible.append(contentsOf: repeatElement(true, count: newCount - visible.count))
+            ceiling.append(contentsOf: repeatElement(.infinity, count: newCount - ceiling.count))
         }
+        drop = Self.cornerDrops(count: newCount, cellWidth: cellWidth, left: leftRadius, right: rightRadius)
         return spills
     }
 
@@ -125,7 +199,7 @@ public struct Ledge: Sendable {
                     shifted[target] += part
                 } else {
                     let x = minX + (Float(target) + 0.5) * cellWidth
-                    spills.append(Spill(x: x, y: y + mass, mass: part * cellWidth))
+                    spills.append(Spill(x: x, y: restY(clamp(i, 0, n - 1)) + mass, mass: part * cellWidth))
                 }
             }
         }
@@ -173,16 +247,19 @@ public struct Ledge: Sendable {
         guard n > 0 else { return }
         for _ in 0..<iterations {
             for i in 0..<(n - 1) where visible[i] && visible[i + 1] {
-                let d = heights[i] - heights[i + 1]
+                // Slope of the real surface: on a rounded corner the edge itself falls away.
+                let d = heights[i] - heights[i + 1] + drop[i + 1] - drop[i]
                 let excess = abs(d) - maxDiff
                 if excess > 0 {
                     let t = excess * 0.5 * rate
                     if d > 0 {
-                        heights[i] -= t
-                        heights[i + 1] += t
+                        let moved = min(t, heights[i])
+                        heights[i] -= moved
+                        heights[i + 1] += moved
                     } else {
-                        heights[i] += t
-                        heights[i + 1] -= t
+                        let moved = min(t, heights[i + 1])
+                        heights[i] += moved
+                        heights[i + 1] -= moved
                     }
                 }
             }
@@ -216,26 +293,32 @@ public struct Ledge: Sendable {
     mutating func takeEndSpills(threshold: Float) -> [Spill] {
         var out: [Spill] = []
         if pendingSpillLeft >= threshold {
-            out.append(Spill(x: minX - 1, y: y + heights[0], mass: pendingSpillLeft))
+            out.append(Spill(x: minX - 1, y: surfaceY(0), mass: pendingSpillLeft))
             pendingSpillLeft = 0
         }
         if pendingSpillRight >= threshold {
-            out.append(Spill(x: maxX + 1, y: y + heights[heights.count - 1], mass: pendingSpillRight))
+            out.append(Spill(x: maxX + 1, y: surfaceY(heights.count - 1), mass: pendingSpillRight))
             pendingSpillRight = 0
         }
         return out
     }
 
-    /// Carves the pile with a circle (the cursor). Mass above the circle's lower boundary
-    /// is removed. A fraction `sideFraction` is pushed to the first cell outside the circle on
-    /// the same side, the rest is returned as spill to be ejected as particles.
-    mutating func erode(center: Vec2, radius: Float, sideFraction: Float) -> [Spill] {
+    /// Cells over which pushed-aside snow is spread next to the carved span.
+    static let bermCells = 8
+
+    /// Carves the pile with a circle (the cursor). Mass above the circle's lower boundary is
+    /// removed. A fraction `sideFraction` is pushed aside and spread as a wedge over the cells
+    /// next to the circle (steepest at the circle, fading outwards, never above `maxHeight`);
+    /// the rest, and whatever does not fit on the wedge, is returned as spill to be ejected as
+    /// particles.
+    mutating func erode(center: Vec2, radius: Float, sideFraction: Float,
+                        maxHeight: Float = .greatestFiniteMagnitude) -> [Spill] {
         let lo = max(0, Int((center.x - radius - minX) / cellWidth))
         let hi = min(heights.count - 1, Int((center.x + radius - minX) / cellWidth))
-        guard lo <= hi, center.y - radius < y + (heights.max() ?? 0), center.y + radius > y else { return [] }
+        guard lo <= hi, center.y - radius < y + (heights.max() ?? 0), center.y + radius > y - maxDrop else { return [] }
         var spills: [Spill] = []
-        let leftTarget = lo - 1
-        let rightTarget = hi + 1
+        var pushedLeft: Float = 0
+        var pushedRight: Float = 0
         for i in lo...hi where visible[i] && heights[i] > 0 {
             let dx = cellCenterX(i) - center.x
             let r2 = radius * radius - dx * dx
@@ -243,21 +326,44 @@ public struct Ledge: Sendable {
             let half = r2.squareRoot()
             let bottom = center.y - half
             let top = center.y + half
-            let surface = y + heights[i]
-            guard bottom < surface, top > y else { continue }
-            let newHeight = max(0, bottom - y)
+            let rest = restY(i)
+            let surface = rest + heights[i]
+            guard bottom < surface, top > rest else { continue }
+            let newHeight = max(0, bottom - rest)
             let removed = heights[i] - newHeight
             guard removed > 0.01 else { continue }
             heights[i] = newHeight
-            let target = dx < 0 ? leftTarget : rightTarget
-            var ejected = removed
-            if target >= 0, target < heights.count, visible[target] {
-                heights[target] += removed * sideFraction
-                ejected = removed * (1 - sideFraction)
-            }
-            spills.append(Spill(x: cellCenterX(i), y: surface, mass: ejected * cellWidth))
+            let aside = removed * sideFraction
+            if dx < 0 { pushedLeft += aside } else { pushedRight += aside }
+            spills.append(Spill(x: cellCenterX(i), y: surface, mass: (removed - aside) * cellWidth))
         }
+        spills += spreadBerm(pushedLeft, from: lo - 1, step: -1, maxHeight: maxHeight)
+        spills += spreadBerm(pushedRight, from: hi + 1, step: 1, maxHeight: maxHeight)
         return spills
+    }
+
+    /// Adds `amount` (in height units, summed over cells) as a wedge starting at cell `start` and
+    /// running away in direction `step`. Returns what did not fit as spill.
+    private mutating func spreadBerm(_ amount: Float, from start: Int, step: Int, maxHeight: Float) -> [Spill] {
+        guard amount > 0 else { return [] }
+        let cells = Self.bermCells
+        let weightSum = Float(cells * (cells + 1) / 2)
+        var leftover: Float = 0
+        for j in 0..<cells {
+            let share = amount * Float(cells - j) / weightSum
+            let index = start + step * j
+            guard index >= 0, index < heights.count, visible[index] else {
+                leftover += share
+                continue
+            }
+            let room = max(0, maxHeight * capFactor(index) - heights[index])
+            let added = min(share, room)
+            heights[index] += added
+            leftover += share - added
+        }
+        guard leftover > 0 else { return [] }
+        let edge = clamp(start, 0, heights.count - 1)
+        return [Spill(x: cellCenterX(edge), y: surfaceY(edge) + 2, mass: leftover * cellWidth)]
     }
 
     /// Hard limit: cuts every cell down to `maxHeight` (excess is compacted away).
@@ -282,7 +388,7 @@ public struct Ledge: Sendable {
         for i in heights.indices where heights[i] > 0.05 && visible[i] {
             let part = heights[i] * min(fraction, 1)
             heights[i] -= part
-            spills.append(Spill(x: cellCenterX(i), y: y + heights[i] + part * 0.5, mass: part * cellWidth))
+            spills.append(Spill(x: cellCenterX(i), y: surfaceY(i) + part * 0.5, mass: part * cellWidth))
         }
         return spills
     }

@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Separate options "Pile Up on Windows" and "Pile Up on Dock", and "Pointer Pushes Effects Away" (turn off to keep the cursor from bouncing or carving anything).
+- "Hide Effects in Apps": the effects disappear while a chosen app is in front (#4).
+
+### Changed
+
+- Compact menu: rarely used switches moved into a new "Options" submenu, the main menu went from about 30 to 14 rows.
+- Several displays share one wind, and effects fly across the edge between neighbouring displays instead of ending at the edge (#3).
+- Piles follow the rounded corners of windows and the Dock instead of floating over them.
+- Wiping fast with the cursor now leaves a soft, natural edge instead of a bar.
+- On battery and in Low Power Mode the overlay renders at 1x instead of Retina resolution (less GPU load, #2).
+
+### Fixed
+
+- Snow on a window stays hidden behind a window that opens above it instead of showing through.
+
 ## [1.1.0] - 2026-11-20
 
 ### Added

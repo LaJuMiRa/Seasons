@@ -13,7 +13,10 @@ final class OverlayController: NSObject, MTKViewDelegate {
     private let renderer: MetalRenderer
     private var batch = RenderBatch()
     private var lastFrame: CFTimeInterval?
-    private var simulationTime: Double = 0
+    /// All screens share this wind, so the effect falls the same way everywhere.
+    private static let sharedWindSeed: UInt64 = 0x5EA5_0001
+    /// Called with particles that left this screen towards a neighbour (positions in local points).
+    var onParticlesExit: (([Particle]) -> Void)?
     private var quietFrames = 0
     private var lastSpecs: [LedgeSpec] = []
     private var occlusionToken: NSObjectProtocol?
@@ -26,9 +29,12 @@ final class OverlayController: NSObject, MTKViewDelegate {
     private var userPaused = false
     private var suspended = false
     private var occluded = false
+    /// An app from "Hide Effects in Apps" is in front: the overlay is out of the way.
+    private var hiddenByApp = false
     private(set) var isIdle = false
     private var intensity: Intensity = .medium
     private var hasEffect = true
+    private var pointerInteraction = true
 
     /// Frames of "nothing happens" before the view stops rendering.
     private static let framesBeforeIdle = 45
@@ -41,7 +47,7 @@ final class OverlayController: NSObject, MTKViewDelegate {
         renderer = MetalRenderer(context: context)
         let seed = UInt64(displayID) &* 0x9E37_79B9 ^ UInt64(Date().timeIntervalSince1970)
         world = SimulationWorld(width: Float(screen.frame.width), height: Float(screen.frame.height),
-                                effect: .snow, seed: seed)
+                                effect: .snow, seed: seed, windSeed: Self.sharedWindSeed)
         super.init()
 
         view.colorPixelFormat = MetalContext.pixelFormat
@@ -81,7 +87,7 @@ final class OverlayController: NSObject, MTKViewDelegate {
         old.orderOut(nil)
         old.contentView = nil
         window.contentView = view
-        window.orderFrontRegardless()
+        if hiddenByApp { window.orderOut(nil) } else { window.orderFrontRegardless() }
         observeOcclusion()
         occlusionChanged()
     }
@@ -110,7 +116,9 @@ final class OverlayController: NSObject, MTKViewDelegate {
         if let effect = scene.effect { world.setEffect(effect) }
         hasEffect = scene.effect != nil
         world.flowersEnabled = scene.flowers
-        world.accumulateOnWindowsAndDock = settings.accumulate
+        world.accumulateOnWindows = settings.pileOnWindows
+        world.accumulateOnDock = settings.pileOnDock
+        pointerInteraction = settings.pointerInteraction
         world.isMelting = settings.melting
         intensity = settings.intensity
         userPaused = settings.paused
@@ -128,6 +136,29 @@ final class OverlayController: NSObject, MTKViewDelegate {
         }
         guard value != suspended else { return }
         suspended = value
+        updateRunning()
+    }
+
+    func setNeighbors(left: Bool, right: Bool) {
+        world.hasNeighborLeft = left
+        world.hasNeighborRight = right
+    }
+
+    /// Takes over particles that flew in from a neighbouring screen.
+    func adopt(_ incoming: [Particle]) {
+        incoming.forEach(world.adopt)
+        wake()
+    }
+
+    func setHiddenByApp(_ value: Bool) {
+        guard value != hiddenByApp else { return }
+        hiddenByApp = value
+        if value {
+            window.orderOut(nil)
+        } else {
+            window.orderFrontRegardless()
+            lastFrame = nil
+        }
         updateRunning()
     }
 
@@ -153,7 +184,8 @@ final class OverlayController: NSObject, MTKViewDelegate {
         let dock = DockLocator.dock(on: screen, isPrimary: isPrimary, prefs: dockPrefs)
         let geometry = ScreenGeometry(width: Float(f.width), height: Float(f.height),
                                       topInset: Float(f.maxY - screen.visibleFrame.maxY), dock: dock, windows: local)
-        let specs = LedgeLayout.compute(geometry, includeWindowsAndDock: world.accumulateOnWindowsAndDock)
+        let specs = LedgeLayout.compute(geometry, includeWindows: world.accumulateOnWindows,
+                                        includeDock: world.accumulateOnDock)
         world.setGardenBase(DockLocator.gardenBase(for: dock, screenWidth: Float(f.width)))
         guard specs != lastSpecs else { return }
         lastSpecs = specs
@@ -163,7 +195,7 @@ final class OverlayController: NSObject, MTKViewDelegate {
 
     // MARK: - Run state
 
-    private var shouldRender: Bool { !suspended && !occluded && !userPaused && !isIdle }
+    private var shouldRender: Bool { !suspended && !occluded && !userPaused && !isIdle && !hiddenByApp }
 
     private func updateRunning() {
         guard let link = displayLink else { return }
@@ -175,6 +207,17 @@ final class OverlayController: NSObject, MTKViewDelegate {
     private func applyFrameRate() {
         let fps = Float(min(framesPerSecond, screen.maximumFramesPerSecond))
         displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: fps * 0.5, maximum: fps, preferred: fps)
+        applyResolution()
+    }
+
+    /// On battery and in Low Power Mode the view renders at 1x instead of the Retina resolution:
+    /// a quarter of the pixels to shade and composite. Soft particles hardly show the difference.
+    private func applyResolution() {
+        let reduced = framesPerSecond < SystemMonitor.fpsOnAC
+        view.autoResizeDrawable = !reduced
+        let scale = reduced ? 1 : (window.screen?.backingScaleFactor ?? screen.backingScaleFactor)
+        let size = view.bounds.size
+        view.drawableSize = CGSize(width: size.width * scale, height: size.height * scale)
     }
 
     @objc private func displayTick(_ link: CADisplayLink) {
@@ -190,7 +233,7 @@ final class OverlayController: NSObject, MTKViewDelegate {
 
     /// Called by the manager while idle: wake up when the cursor comes close to a pile.
     func checkWake(mouse: NSPoint) {
-        guard isIdle, let local = localMouse(mouse) else { return }
+        guard isIdle, pointerInteraction, let local = localMouse(mouse) else { return }
         if world.isNearInteractive(local) { wake() }
     }
 
@@ -218,13 +261,14 @@ final class OverlayController: NSObject, MTKViewDelegate {
         let dt = lastFrame.map { Float(now - $0) } ?? 1 / 60
         lastFrame = now
         if !userPaused && !suspended {
-            simulationTime += Double(dt)
-            let mouse = localMouse(NSEvent.mouseLocation)
+            let mouse = pointerInteraction ? localMouse(NSEvent.mouseLocation) : nil
             let amount = hasEffect ? intensity.multiplier(at: Date().timeIntervalSinceReferenceDate) : 0
-            world.step(dt: dt, time: simulationTime, input: StepInput(mouse: mouse, intensity: amount))
+            world.step(dt: dt, time: now, input: StepInput(mouse: mouse, intensity: amount))
             let near = mouse.map { world.isNearInteractive($0) } ?? false
             quietFrames = (world.isQuiescent && !near) ? quietFrames + 1 : 0
         }
+        let exited = world.takeExited()
+        if !exited.isEmpty { onParticlesExit?(exited) }
         world.buildRenderBatch(&batch)
         renderer.draw(batch, in: view)
         if quietFrames > Self.framesBeforeIdle && !isIdle {
